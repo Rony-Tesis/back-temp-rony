@@ -1,4 +1,4 @@
-param([ValidateSet('Simulation','Live','Physical')][string]$Mode = 'Simulation', [int]$Port = 8000)
+param([ValidateSet('Simulation','Live','Physical')][string]$Mode = 'Physical', [int]$Port = 8000)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21'
