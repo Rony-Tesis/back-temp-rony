@@ -110,7 +110,7 @@ public final class MonitorService implements AutoCloseable {
                                 Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
                 previousTick = now;
                 if (completed != null) {
-                    history.saveOperation(completed, sourceMode);
+                    // A virtual cycle cannot establish a physical classification.
                     refreshHistory();
                     nextCycle = now + TimeUnit.MILLISECONDS.toNanos(2600);
                 } else if (!LocalDate.now(ZoneOffset.UTC).equals(summaryDay)) refreshHistory();
