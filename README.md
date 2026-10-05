@@ -4,6 +4,8 @@ Backend local de Angular para MIRA y el brazo Hiwonder JetMax. Java 21 y Spring 
 
 ## Ejecutar en este PC
 
+El modo predeterminado utiliza la cámara real y el JetMax físico. El arranque solo conecta y lee; los movimientos requieren **Activar funcionamiento** desde Angular. Sin hardware disponible se informa desconexión, sin sustituirlo por datos simulados. Las variables `RONY_MODE` y `RONY_ENABLE_ROBOT_MOTION`, si están definidas en el IDE o el entorno, tienen prioridad sobre estos valores predeterminados.
+
 MySQL Server debe estar iniciado. La base local es `rony_local` en `127.0.0.1:3306`; la configuración privada de este PC está en `application-local.properties`, excluida de Git. `application.properties` admite `RONY_DB_HOST`, `RONY_DB_PORT`, `RONY_DB_NAME`, `RONY_DB_USER` y `RONY_DB_PASSWORD`; no contiene contraseñas. `run.ps1` pide la contraseña si no hay configuración local ni variable de entorno. Para otro PC configura Java 21 y `JAVA_HOME`, y el Python de visión con `RONY_PYTHON`.
 
 ```powershell
@@ -30,7 +32,7 @@ Abre `http://127.0.0.1:4200/monitoring`. Los botones existentes activan, cancela
 
 En Workbench crea una conexión a `127.0.0.1`, puerto `3306`, usando tu cuenta local. En otro PC ejecuta `database/create-local-database.sql` una vez para crear el esquema. En este PC ya se creó. Al iniciar Spring, Flyway aplica `src/main/resources/db/migration/V1__create_operation_history.sql`; Hibernate valida el esquema, no lo crea ni modifica automáticamente.
 
-`database/inspect-local-data.sql` permite consultar versiones y resultados desde Workbench. `classification_operation` almacena clasificaciones virtuales, con su fuente identificada. `robot_grasp_cycle` almacena planes físicos terminados con pinza a 82°; no afirma presencia de objeto. El resumen de Angular cuenta clasificaciones y el estado del brazo cuenta agarres por separado. El historial sobrevive al reinicio; no se guardan frames, video, tokens ni contraseñas en la base. MySQL utiliza UTF-8 y tiempos UTC. El acceso con root corresponde a este entorno local; configura un usuario de aplicación y un usuario de migraciones para un despliegue.
+`database/inspect-local-data.sql` permite consultar versiones y resultados desde Workbench. `classification_operation` se reserva para clasificaciones confirmadas; los ciclos virtuales no se guardan en MySQL. El flujo actual de agarre y regreso a HOME no confirma un depósito y no crea una clasificación. `robot_grasp_cycle` almacena planes físicos terminados con pinza a 82°; no afirma presencia de objeto. El resumen de Angular cuenta clasificaciones y el estado del brazo cuenta agarres por separado. El historial sobrevive al reinicio; no se guardan frames, video, tokens ni contraseñas en la base. MySQL utiliza UTF-8 y tiempos UTC. El acceso con root corresponde a este entorno local; configura un usuario de aplicación y un usuario de migraciones para un despliegue.
 
 ## Arquitectura y estándares
 
