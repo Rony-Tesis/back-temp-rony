@@ -33,7 +33,7 @@ public class MonitorController {
         streams = new Semaphore(properties.maximumStreams());
     }
 
-    @GetMapping("/snapshot")
+    @GetMapping(value = "/snapshot", produces = "application/json")
     @Operation(summary = "Consultar el snapshot coherente de cámara y proceso")
     public MonitorSnapshot snapshot() {
         return monitor.snapshot();

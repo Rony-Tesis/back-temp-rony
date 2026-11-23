@@ -49,6 +49,42 @@ class HistoryPersistenceTest {
     }
 
     @Test
+    void aggregateQueryPreservesCutoffOutcomesAndWeightedAverage() {
+        Instant cutoff = Instant.parse("2099-01-01T00:00:00Z");
+        var before = history.summary(cutoff);
+        history.saveOperation(
+                new Operation(
+                        UUID.randomUUID().toString(),
+                        cutoff.minusSeconds(1),
+                        "Cartón",
+                        "cardboard",
+                        .9,
+                        "failure",
+                        1000),
+                "live");
+        history.saveOperation(
+                new Operation(
+                        UUID.randomUUID().toString(),
+                        cutoff.plusSeconds(1),
+                        "Plástico",
+                        "plastic",
+                        .9,
+                        "unverified",
+                        3000),
+                "live");
+        var after = history.summary(cutoff);
+        assertEquals(before.processedToday() + 1, after.processedToday());
+        assertEquals(before.total() + 2, after.total());
+        assertEquals(before.successful(), after.successful());
+        assertEquals(before.failed() + 1, after.failed());
+        assertEquals(before.unverified() + 1, after.unverified());
+        assertEquals(
+                (before.averageDurationMs() * before.total() + 4000) / after.total(),
+                after.averageDurationMs(),
+                .001);
+    }
+
+    @Test
     void remoteOperationRetriesRemainSingleAfterDatabaseRoundTrip() {
         long before = history.summary(Instant.EPOCH).total();
         var event =

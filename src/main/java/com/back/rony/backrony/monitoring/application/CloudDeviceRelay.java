@@ -57,6 +57,7 @@ public final class CloudDeviceRelay implements MonitorPort {
     private final HistoryPort history;
     private final RobotProfile profile;
     private final String deviceId;
+    private final boolean browserStreaming;
     private final Map<String, Pending> pending = new LinkedHashMap<>();
     private final Set<String> retiredBoots = new LinkedHashSet<>();
     private HistoryPort.Summary cachedSummary;
@@ -69,9 +70,15 @@ public final class CloudDeviceRelay implements MonitorPort {
     private boolean running;
 
     public CloudDeviceRelay(HistoryPort history, RobotProfile profile, String deviceId) {
+        this(history, profile, deviceId, true);
+    }
+
+    public CloudDeviceRelay(
+            HistoryPort history, RobotProfile profile, String deviceId, boolean browserStreaming) {
         this.history = history;
         this.profile = profile;
         this.deviceId = deviceId;
+        this.browserStreaming = browserStreaming;
     }
 
     public synchronized Reply exchange(Exchange packet) {
@@ -257,7 +264,7 @@ public final class CloudDeviceRelay implements MonitorPort {
     }
 
     public synchronized MonitorSnapshot snapshot() {
-        if (cachedSummary == null || System.nanoTime() - historyAt > TimeUnit.SECONDS.toNanos(1)) {
+        if (cachedSummary == null || System.nanoTime() - historyAt > TimeUnit.SECONDS.toNanos(5)) {
             cachedSummary =
                     history.summary(
                             LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant());
@@ -271,9 +278,9 @@ public final class CloudDeviceRelay implements MonitorPort {
                 Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
                 "live",
                 "physical",
-                "sse",
+                browserStreaming ? "sse" : "polling",
                 robot,
-                "mjpeg",
+                browserStreaming ? "mjpeg" : "jpeg",
                 new MonitorSnapshot.SimulationState(
                         false,
                         robot.cycleActive(),

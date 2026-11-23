@@ -134,7 +134,7 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(1, self.outbox.completed_cycles())
 
     def test_native_sources_parse_on_robot_python36(self):
-        for name in ('controller.py', 'plans.py', 'outbox.py', 'run_edge.py', 'yolo_tensorrt.py'):
+        for name in ('controller.py', 'plans.py', 'outbox.py', 'run_edge.py', 'yolo_tensorrt.py', 'network_check.py'):
             source = (Path(__file__).parent / name).read_text(encoding='utf-8')
             ast.parse(source, feature_version=(3, 6))
 

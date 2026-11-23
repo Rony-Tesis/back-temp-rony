@@ -35,6 +35,7 @@ public class ApplicationConfiguration {
             RobotProfile profile,
             @Value("${rony.execution-location:pc}") String executionLocation,
             @Value("${rony.device-id:jetmax-01}") String deviceId,
+            @Value("${rony.browser-streaming-enabled:true}") boolean browserStreaming,
             @Value("${rony.record-demo-cycles:false}") boolean recordDemoCycles,
             @Value("${rony.allow-test-agent:false}") boolean allowTestAgent) {
         if ("cloud".equals(executionLocation)) {
@@ -42,7 +43,7 @@ public class ApplicationConfiguration {
                 throw new IllegalArgumentException(
                         "Configura una clave web privada para el servidor.");
             }
-            return new CloudDeviceRelay(history, profile, deviceId);
+            return new CloudDeviceRelay(history, profile, deviceId, browserStreaming);
         }
         if (!"pc".equals(executionLocation))
             throw new IllegalArgumentException("Ubicación de ejecución inválida.");

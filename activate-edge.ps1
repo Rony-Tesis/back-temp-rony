@@ -18,9 +18,28 @@ catch { $agent = $null }
 if ($agent -and $agent.job -and $agent.job.state -eq 'running') { throw 'The bench executor still has an active trajectory.' }
 Write-Host 'Installs only our autonomous service. YOLO and all classification will run on the JetMax.'
 Write-Host 'Vendor ROS/calibration stay unchanged. Startup observes; enable motion from the HTTPS web.'
+Write-Host 'The robot must have internet. Its UTC clock is synchronized for TLS before installation.'
 $archive = Join-Path $PSScriptRoot 'edge_runtime/dist/rony-edge.tar.gz'
 & scp $archive "${robotUser}@${RobotHost}:rony-edge.tar.gz"
 if ($LASTEXITCODE -ne 0) { throw 'Could not copy autonomous service.' }
-& ssh -t "${robotUser}@${RobotHost}" 'umask 077; chmod 600 ~/rony-edge.tar.gz && mkdir -p ~/rony-edge-install && tar -xzf ~/rony-edge.tar.gz -C ~/rony-edge-install && cd ~/rony-edge-install && bash -ic ''python3 run_edge.py --check --profile rony_profile.json --model-dir /home/hiwonder/rony-model-check'' && sudo bash install.sh && systemctl is-active rony-edge'
+$installUtc = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
+$remoteCommand = 'umask 077; chmod 600 ~/rony-edge.tar.gz && mkdir -p ~/rony-edge-install && tar -xzf ~/rony-edge.tar.gz -C ~/rony-edge-install && cd ~/rony-edge-install && bash activate.sh ' + $installUtc
+& ssh -t "${robotUser}@${RobotHost}" $remoteCommand
 if ($LASTEXITCODE -ne 0) { throw 'Autonomous service installation did not complete. Inspect the report before retrying.' }
-Write-Host 'Autonomous service installed. Open the deployed HTTPS web to inspect state and start classification.'
+$confirmationDeadline = [DateTime]::UtcNow.AddSeconds(50)
+$onlineState = $null
+do {
+    try {
+        $onlineState = Invoke-RestMethod -Uri ($configuration.cloud_api_url.TrimEnd('/') + '/api/v1/monitor/status') -Headers $headers -TimeoutSec 8
+        if ($onlineState.robotState.connected) { break }
+    } catch { $onlineState = $null }
+    Start-Sleep -Seconds 2
+} while ([DateTime]::UtcNow -lt $confirmationDeadline)
+if (-not $onlineState -or -not $onlineState.robotState.connected) {
+    throw 'Service installed but robot telemetry is not confirmed in Render. Inspect journalctl -u rony-edge before enabling motion.'
+}
+$receiptPath = Join-Path $PSScriptRoot 'data/jetson-online-status.json'
+New-Item -ItemType Directory -Force -Path (Split-Path $receiptPath -Parent) | Out-Null
+[IO.File]::WriteAllText($receiptPath, (($onlineState | ConvertTo-Json -Depth 12) + "`n"), [Text.UTF8Encoding]::new($false))
+Write-Host 'JetMax telemetry confirmed in the public HTTPS API. Startup sent no motion commands.'
+Write-Host ('Open ' + $configuration.frontend_url + '/monitoring to inspect state before enabling classification.')

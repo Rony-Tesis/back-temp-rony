@@ -45,6 +45,12 @@ Comandos de mantenimiento del nuevo servicio: `systemctl status rony-edge` y `jo
 
 ## Netlify, Render y Aiven
 
+Las direcciones públicas son `https://rony-brazo.netlify.app` y `https://rony-api.onrender.com`. La configuración local del JetMax ya puede prepararse con `./prepare-render.ps1 -ApiUrl https://rony-api.onrender.com`. Netlify conserva `/api` en el origen del navegador mediante su proxy HTTPS.
+
+El perfil Render anuncia `polling` y `jpeg` para el navegador: peticiones finitas de estado e imágenes evitan depender de eventos/video indefinidos a través de Netlify. El cálculo y control del robot continúan en el JetMax. La alternativa de servidor unificado mantiene SSE/MJPEG. Los totales del historial se calculan en una consulta agregada y se guardan en caché cinco segundos; un resultado del brazo invalida la caché inmediatamente. Una cabecera Accept incompatible devuelve 406 vacío, sin intentar serializar otra respuesta JSON incompatible.
+
+Con la clasificación detenida y el JetMax conectado a una WiFi con internet, `./activate-edge.ps1` instala nuestro servicio autónomo. SSH/SCP/sudo pedirán la contraseña Linux. Antes de detener el ejecutor anterior, sincroniza la hora UTC con la del PC, solicita NTP y comprueba DNS/HTTPS y el estado de la API. Luego verifica YOLO/ROS/calibración en lectura, instala `rony-edge` y espera que Render confirme telemetría del brazo. Guarda `data/jetson-online-status.json`. El arranque solo observa y no inicia movimientos. Si el cambio de WiFi da otra IP al JetMax, usar `-RobotHost IP_ACTUAL`. Estas comprobaciones no configuran redes WiFi ni modifican ROS o la calibración.
+
 El perfil `render` permite 45 s para obtener/iniciar sesión en una conexión de la base y un margen inicial de 60 s. El valor de 5 s del banco local también limita el login JDBC y puede caducar durante el primer handshake TLS en una instancia con poca CPU. TCP y lecturas JDBC tienen límites de 30 s. Los plazos siguen acotados y se mantiene la verificación de certificado y hostname; no es necesario cambiar credenciales o desactivar SSL por este error.
 
 El front publicado es `https://rony-brazo.netlify.app`. El `Dockerfile` de la raíz del backend construye únicamente este repositorio con Java 21; no necesita Angular, Python, YOLO ni los otros repositorios dentro de Render. `deploy/Dockerfile` conserva la alternativa de servidor unificado anterior y no se debe seleccionar para este despliegue.

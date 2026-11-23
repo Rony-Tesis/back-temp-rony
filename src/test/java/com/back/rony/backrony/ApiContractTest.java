@@ -46,6 +46,16 @@ class ApiContractTest {
     }
 
     @Test
+    void incompatibleSnapshotAcceptReturnsEmpty406WithoutRecursiveErrorSerialization()
+            throws Exception {
+        mvc.perform(get("/api/v1/monitor/snapshot").accept("image/png"))
+                .andExpect(status().isNotAcceptable())
+                .andExpect(
+                        org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                                .string(""));
+    }
+
+    @Test
     void physicalCommandsRemainDisabledInSimulation() throws Exception {
         mvc.perform(
                         post("/api/v1/robot/commands")

@@ -18,6 +18,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 public class CloudDeviceRelayTest {
+    @Test
+    void boundedBrowserTransportUsesPollingAndJpeg() {
+        var relay = new CloudDeviceRelay(new History(), TestProfile.profile(), "jetmax-01", false);
+        assertEquals("polling", relay.snapshot().telemetryTransport());
+        assertEquals("jpeg", relay.snapshot().cameraTransport());
+    }
+
     static final class History implements HistoryPort {
         final List<Operation> rows = new ArrayList<>();
 

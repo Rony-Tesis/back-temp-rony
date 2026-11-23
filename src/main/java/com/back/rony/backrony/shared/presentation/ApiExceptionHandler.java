@@ -40,6 +40,12 @@ public class ApiExceptionHandler {
         // The client disconnected after the response began.
     }
 
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotAcceptableException.class)
+    ResponseEntity<Void> notAcceptable() {
+        // No JSON body: that would fail the same Accept negotiation again.
+        return ResponseEntity.status(406).build();
+    }
+
     @ExceptionHandler(Exception.class)
     ResponseEntity<Map<String, String>> unexpected(Exception e) {
         LOG.error("Request failed with {}", e.getClass().getSimpleName());

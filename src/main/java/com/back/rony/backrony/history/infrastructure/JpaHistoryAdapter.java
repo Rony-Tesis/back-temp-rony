@@ -41,13 +41,14 @@ public class JpaHistoryAdapter implements HistoryPort {
 
     @Override
     public Summary summary(Instant since) {
+        var totals = operations.totalsSince(since);
         return new Summary(
-                operations.countByCompletedAtGreaterThanEqual(since),
-                operations.count(),
-                operations.countByResult("success"),
-                operations.countByResult("failure"),
-                operations.averageDuration(),
-                operations.countByResult("unverified"));
+                totals.getProcessedToday(),
+                totals.getTotal(),
+                totals.getSuccessful(),
+                totals.getFailed(),
+                totals.getAverageDurationMs(),
+                totals.getUnverified());
     }
 
     @Override
