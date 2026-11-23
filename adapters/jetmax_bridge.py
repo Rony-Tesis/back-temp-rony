@@ -27,7 +27,13 @@ def emit(value):
 
 def observe(message):
     global latest, latest_at
-    latest = {'x': message.x, 'y': message.y, 'z': message.z, 'gripperAngle': message.pwm1}
+    pose = {'x': message.x, 'y': message.y, 'z': message.z, 'gripperAngle': message.pwm1}
+    if not all(math.isfinite(value) for value in pose.values()):
+        return
+    joints = {name: getattr(message, name, None) for name in ('joint1', 'joint2', 'joint3')}
+    if all(value is not None and math.isfinite(value) for value in joints.values()):
+        pose['joints'] = joints
+    latest = pose
     latest_at = time.monotonic()
     emit({'kind': 'telemetry', 'pose': latest})
 

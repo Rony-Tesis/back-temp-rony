@@ -75,7 +75,13 @@ public final class JetMaxRobotAdapter implements RobotPort {
         request.put("action", "execute");
         request.put("stage", step.stage());
         request.put("duration", step.duration());
-        request.put("expected", expected);
+        request.put(
+                "expected",
+                Map.of(
+                        "x", expected.x(),
+                        "y", expected.y(),
+                        "z", expected.z(),
+                        "gripperAngle", expected.gripperAngle()));
         if (step.position() != null)
             request.put(
                     "position",

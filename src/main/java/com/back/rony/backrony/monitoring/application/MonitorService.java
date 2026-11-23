@@ -23,6 +23,7 @@ public final class MonitorService implements AutoCloseable {
     private final VisionPort source;
     private final String sourceMode;
     private final HistoryPort history;
+    private final boolean recordDemoCycles;
     private final Object lock = new Object();
     private final VirtualCycle virtual = new VirtualCycle();
     private final PhysicalMotionService physical;
@@ -43,10 +44,20 @@ public final class MonitorService implements AutoCloseable {
             String sourceMode,
             HistoryPort history,
             Supplier<RobotPort> robotFactory) {
+        this(source, sourceMode, history, robotFactory, false);
+    }
+
+    public MonitorService(
+            VisionPort source,
+            String sourceMode,
+            HistoryPort history,
+            Supplier<RobotPort> robotFactory,
+            boolean recordDemoCycles) {
         this.source = source;
         this.sourceMode = sourceMode;
         this.history = history;
-        this.autoCycle = "simulation".equals(sourceMode);
+        this.recordDemoCycles = recordDemoCycles && "simulation".equals(sourceMode);
+        this.autoCycle = "simulation".equals(sourceMode) && !this.recordDemoCycles;
         this.physical =
                 robotFactory == null
                         ? null
@@ -110,7 +121,7 @@ public final class MonitorService implements AutoCloseable {
                                 Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
                 previousTick = now;
                 if (completed != null) {
-                    // A virtual cycle cannot establish a physical classification.
+                    if (recordDemoCycles) history.saveOperation(completed, "simulation");
                     refreshHistory();
                     nextCycle = now + TimeUnit.MILLISECONDS.toNanos(2600);
                 } else if (!LocalDate.now(ZoneOffset.UTC).equals(summaryDay)) refreshHistory();
@@ -152,6 +163,8 @@ public final class MonitorService implements AutoCloseable {
                 case "pause" -> virtual.paused(true);
                 case "resume" -> virtual.paused(false);
                 case "cycle" -> {
+                    if (!visionHealthy())
+                        throw new IllegalStateException("La cámara debe estar disponible.");
                     Detection target =
                             "live".equals(sourceMode)
                                     ? physicalTarget()

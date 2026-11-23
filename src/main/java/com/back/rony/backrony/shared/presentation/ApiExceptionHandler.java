@@ -8,6 +8,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 /** Stable error envelope; internal stack traces and connection credentials stay private. */
 @RestControllerAdvice
@@ -32,6 +33,11 @@ public class ApiExceptionHandler {
                                 e.getMessage() == null
                                         ? "Operación no admisible."
                                         : e.getMessage()));
+    }
+
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    void closedStream() {
+        // The client disconnected after the response began.
     }
 
     @ExceptionHandler(Exception.class)

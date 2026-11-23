@@ -1,7 +1,19 @@
 package com.back.rony.backrony.robotics.domain;
 
 /** Controller-reported setpoint, not encoder-confirmed physical arrival. */
-public record RobotPose(double x, double y, double z, double gripperAngle) {
+public record RobotPose(double x, double y, double z, double gripperAngle, JointAngles joints) {
+    public RobotPose(double x, double y, double z, double gripperAngle) {
+        this(x, y, z, gripperAngle, null);
+    }
+
+    public record JointAngles(double joint1, double joint2, double joint3) {
+        public JointAngles {
+            if (!Double.isFinite(joint1) || !Double.isFinite(joint2) || !Double.isFinite(joint3)) {
+                throw new IllegalArgumentException("Telemetría articular inválida.");
+            }
+        }
+    }
+
     public RobotPose {
         if (!Double.isFinite(x)
                 || !Double.isFinite(y)

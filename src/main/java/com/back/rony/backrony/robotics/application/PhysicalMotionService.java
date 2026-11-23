@@ -319,6 +319,7 @@ public final class PhysicalMotionService implements AutoCloseable {
                         grasps,
                         pose == null ? null : new ReportedPosition(pose.x(), pose.y(), pose.z()),
                         pose == null ? null : pose.gripperAngle(),
+                        pose == null ? null : pose.joints(),
                         t == null ? null : t.timestamp(),
                         error);
         ProcessState process =
@@ -344,6 +345,7 @@ public final class PhysicalMotionService implements AutoCloseable {
             long completedGrasps,
             ReportedPosition reportedPosition,
             Double gripperAngle,
+            RobotPose.JointAngles reportedJoints,
             Instant telemetryAt,
             String error) {}
 

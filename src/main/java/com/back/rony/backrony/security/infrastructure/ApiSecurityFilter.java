@@ -36,6 +36,10 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
         response.setHeader("Referrer-Policy", "no-referrer");
         response.setHeader("X-Frame-Options", "DENY");
         response.setHeader("Cache-Control", "no-store");
+        String path = request.getRequestURI();
+        boolean portal =
+                List.of("/index.html", "/dashboard", "/monitoring", "/classifications")
+                        .contains(path);
         boolean docs =
                 request.getRequestURI().startsWith("/swagger-ui")
                         || request.getRequestURI().startsWith("/api/docs");
@@ -43,7 +47,9 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
                 "Content-Security-Policy",
                 docs
                         ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'"
-                        : "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'");
+                        : portal
+                                ? "default-src 'self'; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+                                : "default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'");
         String host = request.getServerName();
         if (!properties.allowedHosts().contains(host)) {
             reject(response, 400, "Host no permitido.");
@@ -66,7 +72,6 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
                 return;
             }
         }
-        String path = request.getRequestURI();
         boolean protectedPath = path.startsWith("/api/") || path.startsWith("/swagger-ui");
         if (protectedPath && !path.equals("/api/v1/session") && access.required()) {
             String credential =

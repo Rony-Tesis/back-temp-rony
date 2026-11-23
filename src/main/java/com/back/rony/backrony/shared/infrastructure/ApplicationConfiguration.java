@@ -10,6 +10,7 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,7 +20,11 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration
 public class ApplicationConfiguration {
     @Bean(destroyMethod = "close")
-    MonitorService monitor(RonyProperties properties, HistoryPort history, ObjectMapper mapper) {
+    MonitorService monitor(
+            RonyProperties properties,
+            HistoryPort history,
+            ObjectMapper mapper,
+            @Value("${rony.record-demo-cycles:false}") boolean recordDemoCycles) {
         VisionPort source =
                 "live".equals(properties.sourceMode())
                         ? new MiraVisionAdapter(properties, mapper)
@@ -28,9 +33,10 @@ public class ApplicationConfiguration {
                 source,
                 properties.sourceMode(),
                 history,
-                properties.physicalMotion()
+                properties.physicalMotion() && "live".equals(properties.sourceMode())
                         ? () -> new JetMaxRobotAdapter(properties, mapper)
-                        : null);
+                        : null,
+                recordDemoCycles);
     }
 
     @Bean

@@ -20,7 +20,7 @@ CALIBRATION = {
 def credentials(notebook=None):
     values = {}
     # Read only literal assignments. Never execute the notebook or log credentials.
-    if notebook:
+    if notebook and Path(notebook).is_file():
         data = json.loads(Path(notebook).read_text(encoding='utf-8'))
         for cell in data['cells']:
             if cell['cell_type'] != 'code':
