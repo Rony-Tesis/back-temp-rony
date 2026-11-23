@@ -97,7 +97,16 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
             reject(response, 401, "Acceso del dispositivo no autorizado.");
             return;
         }
-        if (!devicePath && protectedPath && !path.equals("/api/v1/session") && access.required()) {
+        // This exact read endpoint authenticates one-use camera capabilities in its controller.
+        // MVC enforces its explicit CORS policy, including preflight requests.
+        boolean cameraStream =
+                path.equals("/api/v1/monitor/camera-stream")
+                        && List.of("GET", "OPTIONS").contains(request.getMethod());
+        if (!devicePath
+                && protectedPath
+                && !cameraStream
+                && !path.equals("/api/v1/session")
+                && access.required()) {
             String credential =
                     request.getCookies() == null
                             ? ""

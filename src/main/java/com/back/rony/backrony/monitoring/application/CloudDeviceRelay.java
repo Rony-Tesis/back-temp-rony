@@ -132,7 +132,7 @@ public final class CloudDeviceRelay implements MonitorPort {
         pending.values().removeIf(item -> received - item.created() > TimeUnit.SECONDS.toNanos(10));
         notifyAll();
         return new Reply(
-                pending.values().stream().map(Pending::command).toList(), acknowledged, 1000, 15);
+                pending.values().stream().map(Pending::command).toList(), acknowledged, 200, 15);
     }
 
     private void validate(Exchange packet) {

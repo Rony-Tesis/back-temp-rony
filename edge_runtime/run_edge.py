@@ -1,6 +1,7 @@
 """JetMax autonomous runtime: native YOLO, local planning/ROS, outbound HTTPS only."""
 import argparse
 import base64
+import http.client
 import json
 import logging
 import os
@@ -100,6 +101,10 @@ class CloudClient:
         context = ssl.create_default_context()
         context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
         self.opener = build_opener(NoRedirect(), HTTPSHandler(context=context))
+        self.connection = (http.client.HTTPSConnection(parsed.hostname, parsed.port, timeout=5, context=context)
+                           if parsed.scheme == 'https' else http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=5))
+        self.path = parsed.path.rstrip('/') + '/api/v1/device/exchange'
+        self.poll_seconds = .2
         self.last_response, self.sequence, self.acknowledged = 0., 0, []
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self.run, name='rony-cloud-https', daemon=True)
@@ -114,15 +119,21 @@ class CloudClient:
             packet['jpeg'] = base64.b64encode(observation.jpeg).decode('ascii')
         packet['acknowledgedCommands'] = self.acknowledged[-32:]
         body = json.dumps(packet, ensure_ascii=False, allow_nan=False).encode('utf-8')
-        request = Request(self.endpoint, data=body, headers={'Authorization': 'Bearer ' + self.token,
+        self.connection.request('POST', self.path, body=body, headers={'Authorization': 'Bearer ' + self.token,
             'Content-Type': 'application/json', 'X-Rony-Control': '1'})
-        with self.opener.open(request, timeout=5) as response:
+        with self.connection.getresponse() as response:
             raw = response.read(65537)
+            if response.status != 200:
+                raise ValueError('API HTTPS respondió HTTP ' + str(response.status))
         if len(raw) > 65536:
             raise ValueError('Respuesta de la API demasiado grande')
         reply = json.loads(raw.decode('utf-8'))
         if reply.get('controlLeaseSeconds') != 15 or len(reply.get('commands', [])) > 16:
             raise ValueError('Protocolo HTTPS incompatible')
+        interval = reply.get('pollIntervalMs', 1000)
+        if not isinstance(interval, (int, float)) or not 100 <= interval <= 5000:
+            raise ValueError('Intervalo de telemetría inválido')
+        self.poll_seconds = interval / 1000.
         self.last_response = time.monotonic()
         self.controller.outbox.acknowledge(reply.get('acknowledgedOperations', []))
         self.acknowledged = []
@@ -132,18 +143,24 @@ class CloudClient:
 
     def run(self):
         while not self.stop_event.is_set():
+            started, delay = time.monotonic(), self.poll_seconds
             try:
                 self.exchange_once()
+                delay = self.poll_seconds
             except Exception as error:
+                self.connection.close()
+                delay = 1.
                 if isinstance(getattr(error, 'reason', error), ssl.SSLError):
                     LOG.warning('No se pudo verificar TLS: revisa fecha/hora del JetMax y certificado de la API')
                 else:
                     LOG.warning('API HTTPS no disponible: %s', type(error).__name__)
-            self.stop_event.wait(1)
+            # Account for upload time instead of adding another full second after every frame.
+            self.stop_event.wait(max(.01, delay - (time.monotonic() - started)))
 
     def close(self):
         self.stop_event.set()
         self.thread.join(timeout=7)
+        self.connection.close()
 
 
 def main():
