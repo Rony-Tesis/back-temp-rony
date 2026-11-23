@@ -26,7 +26,9 @@ public record RonyProperties(
         @NotNull Path workerScript,
         @NotNull URI cameraUrl,
         @NotNull Path modelPath,
-        @NotNull Path credentialsNotebook) {
+        @NotNull Path runtimeProfile,
+        @NotNull URI robotAgentUrl,
+        String robotAgentToken) {
     public RonyProperties {
         if (physicalMotion && !"live".equals(sourceMode)) {
             throw new IllegalArgumentException("El movimiento físico requiere cámara real.");
@@ -42,6 +44,15 @@ public record RonyProperties(
                         || cameraUrl.getUserInfo() != null)) {
             throw new IllegalArgumentException(
                     "La cámara requiere una URL HTTP(S) sin credenciales.");
+        }
+        if (robotAgentUrl != null
+                && (!List.of("http", "https").contains(robotAgentUrl.getScheme())
+                        || robotAgentUrl.getHost() == null
+                        || robotAgentUrl.getUserInfo() != null
+                        || robotAgentUrl.getQuery() != null
+                        || robotAgentUrl.getFragment() != null)) {
+            throw new IllegalArgumentException(
+                    "El agente requiere una URL HTTP(S) sin credenciales.");
         }
     }
 }

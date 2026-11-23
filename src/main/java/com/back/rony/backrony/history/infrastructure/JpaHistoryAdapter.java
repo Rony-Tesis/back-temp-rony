@@ -26,6 +26,13 @@ public class JpaHistoryAdapter implements HistoryPort {
     }
 
     @Override
+    @Transactional
+    public void saveRemoteOperation(Operation operation) {
+        if (!operations.existsById(operation.id()))
+            operations.save(new ClassificationEntity(operation, "live"));
+    }
+
+    @Override
     public List<Operation> recentOperations() {
         return operations.findTop100ByOrderByCompletedAtDesc().stream()
                 .map(ClassificationEntity::toDomain)
@@ -39,12 +46,18 @@ public class JpaHistoryAdapter implements HistoryPort {
                 operations.count(),
                 operations.countByResult("success"),
                 operations.countByResult("failure"),
-                operations.averageDuration());
+                operations.averageDuration(),
+                operations.countByResult("unverified"));
     }
 
     @Override
     public long countGrasps() {
         return grasps.count();
+    }
+
+    @Override
+    public long countPhysicalCycles() {
+        return operations.countBySourceModeAndResult("live", "unverified");
     }
 
     @Override

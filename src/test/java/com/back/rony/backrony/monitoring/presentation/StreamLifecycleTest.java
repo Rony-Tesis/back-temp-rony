@@ -3,6 +3,7 @@ package com.back.rony.backrony.monitoring.presentation;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.back.rony.backrony.TestProfile;
 import com.back.rony.backrony.history.application.port.HistoryPort;
 import com.back.rony.backrony.history.domain.Operation;
 import com.back.rony.backrony.monitoring.application.MonitorService;
@@ -47,7 +48,7 @@ class StreamLifecycleTest {
 
                     public void saveGrasp(Detection target) {}
                 };
-        return new MonitorService(source, "live", history, null);
+        return new MonitorService(source, "live", history, null, TestProfile.profile());
     }
 
     private MonitorController controller(MonitorService service) {
@@ -64,7 +65,9 @@ class StreamLifecycleTest {
                         Path.of("worker.py"),
                         URI.create("http://127.0.0.1"),
                         Path.of("model.pt"),
-                        Path.of("notebook.ipynb"));
+                        Path.of("profile.json"),
+                        URI.create("http://127.0.0.1:8090"),
+                        "");
         return new MonitorController(service, JsonMapper.builder().build(), properties);
     }
 

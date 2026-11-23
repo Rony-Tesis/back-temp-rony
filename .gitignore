@@ -1,4 +1,9 @@
 target/
+data/
+robot_agent/dist/
+edge_runtime/dist/
+*.engine
+robot_agent/agent.env
 build/
 .idea/
 .vscode/

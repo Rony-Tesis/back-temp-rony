@@ -1,6 +1,7 @@
 package com.back.rony.backrony.security.infrastructure;
 
 import com.back.rony.backrony.security.application.AccessPolicy;
+import com.back.rony.backrony.security.application.DeviceAccessPolicy;
 import com.back.rony.backrony.shared.infrastructure.RonyProperties;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,11 +22,17 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
     private final AccessPolicy access;
     private final RonyProperties properties;
     private final ObjectMapper mapper;
+    private final DeviceAccessPolicy devices;
 
-    public ApiSecurityFilter(AccessPolicy access, RonyProperties properties, ObjectMapper mapper) {
+    public ApiSecurityFilter(
+            AccessPolicy access,
+            RonyProperties properties,
+            ObjectMapper mapper,
+            DeviceAccessPolicy devices) {
         this.access = access;
         this.properties = properties;
         this.mapper = mapper;
+        this.devices = devices;
     }
 
     @Override
@@ -38,7 +45,7 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
         response.setHeader("Cache-Control", "no-store");
         String path = request.getRequestURI();
         boolean portal =
-                List.of("/index.html", "/dashboard", "/monitoring", "/classifications")
+                List.of("/", "/index.html", "/dashboard", "/monitoring", "/classifications")
                         .contains(path);
         boolean docs =
                 request.getRequestURI().startsWith("/swagger-ui")
@@ -73,7 +80,13 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
             }
         }
         boolean protectedPath = path.startsWith("/api/") || path.startsWith("/swagger-ui");
-        if (protectedPath && !path.equals("/api/v1/session") && access.required()) {
+        boolean devicePath = path.startsWith("/api/v1/device/");
+        if (devicePath
+                && (origin != null || !devices.matches(request.getHeader("Authorization")))) {
+            reject(response, 401, "Acceso del dispositivo no autorizado.");
+            return;
+        }
+        if (!devicePath && protectedPath && !path.equals("/api/v1/session") && access.required()) {
             String credential =
                     request.getCookies() == null
                             ? ""

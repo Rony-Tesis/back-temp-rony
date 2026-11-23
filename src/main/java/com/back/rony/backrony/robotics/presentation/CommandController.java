@@ -1,6 +1,6 @@
 package com.back.rony.backrony.robotics.presentation;
 
-import com.back.rony.backrony.monitoring.application.MonitorService;
+import com.back.rony.backrony.monitoring.application.port.MonitorPort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -21,13 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearerToken")
 @SecurityRequirement(name = "sessionCookie")
 public class CommandController {
-    private final MonitorService monitor;
+    private final MonitorPort monitor;
 
-    public CommandController(MonitorService monitor) {
+    public CommandController(MonitorPort monitor) {
         this.monitor = monitor;
     }
 
-    public record PhysicalCommand(@NotNull @Pattern(regexp = "arm|cancel|reset") String action) {}
+    public record PhysicalCommand(
+            @NotNull @Pattern(regexp = "arm|cancel|reset|close-gripper|park") String action) {}
 
     public record VirtualCommand(@NotNull @Pattern(regexp = "pause|resume|cycle") String action) {}
 

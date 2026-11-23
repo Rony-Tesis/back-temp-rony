@@ -38,7 +38,7 @@ public final class PythonWorkerProcess implements AutoCloseable {
     }
 
     public void start(String kind, Consumer<JsonNode> events, Runnable failed) {
-        if (!java.util.List.of("vision", "robot").contains(kind))
+        if (!java.util.List.of("vision").contains(kind))
             throw new IllegalArgumentException("Worker inválido.");
         try {
             ProcessBuilder builder =
@@ -55,16 +55,13 @@ public final class PythonWorkerProcess implements AutoCloseable {
                             properties.modelPath().toAbsolutePath().normalize().toString());
             builder.environment()
                     .put(
-                            "RONY_CREDENTIALS_NOTEBOOK",
-                            properties
-                                    .credentialsNotebook()
-                                    .toAbsolutePath()
-                                    .normalize()
-                                    .toString());
+                            "RONY_RUNTIME_PROFILE",
+                            properties.runtimeProfile().toAbsolutePath().normalize().toString());
             builder.environment().put("RONY_FPS", Integer.toString(properties.framesPerSecond()));
             builder.environment().put("PYTHONIOENCODING", "utf-8");
             builder.environment().remove("RONY_DB_PASSWORD");
             builder.environment().remove("RONY_ACCESS_TOKEN");
+            builder.environment().remove("RONY_ROBOT_AGENT_TOKEN");
             process = builder.start();
             input =
                     new BufferedWriter(
@@ -143,6 +140,17 @@ public final class PythonWorkerProcess implements AutoCloseable {
             throw new CancellationException();
         } finally {
             pending.remove(id);
+        }
+    }
+
+    public synchronized void send(Map<String, Object> payload) {
+        if (closed || process == null || !process.isAlive()) return;
+        try {
+            input.write(mapper.writeValueAsString(payload));
+            input.newLine();
+            input.flush();
+        } catch (IOException e) {
+            throw new IllegalStateException("Adaptador de visión desconectado.");
         }
     }
 

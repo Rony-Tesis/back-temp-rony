@@ -2,11 +2,13 @@ package com.back.rony.backrony.monitoring.application;
 
 import com.back.rony.backrony.history.application.port.HistoryPort;
 import com.back.rony.backrony.history.domain.Operation;
+import com.back.rony.backrony.monitoring.application.port.MonitorPort;
 import com.back.rony.backrony.monitoring.application.port.VisionPort;
 import com.back.rony.backrony.monitoring.domain.Detection;
 import com.back.rony.backrony.monitoring.domain.VirtualCycle;
 import com.back.rony.backrony.robotics.application.PhysicalMotionService;
 import com.back.rony.backrony.robotics.application.port.RobotPort;
+import com.back.rony.backrony.robotics.domain.RobotProfile;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -19,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /** Coordinates use cases. Locks never nest monitor and actuator state machines. */
-public final class MonitorService implements AutoCloseable {
+public final class MonitorService implements MonitorPort {
     private final VisionPort source;
     private final String sourceMode;
     private final HistoryPort history;
@@ -27,6 +29,8 @@ public final class MonitorService implements AutoCloseable {
     private final Object lock = new Object();
     private final VirtualCycle virtual = new VirtualCycle();
     private final PhysicalMotionService physical;
+    private final RobotProfile profile;
+    private long targetAfterSequence, nextHistoryRefresh;
     private final ScheduledExecutorService ticker = Executors.newSingleThreadScheduledExecutor();
     private volatile VisionPort.Observation observation;
     private volatile long frameAt;
@@ -43,8 +47,9 @@ public final class MonitorService implements AutoCloseable {
             VisionPort source,
             String sourceMode,
             HistoryPort history,
-            Supplier<RobotPort> robotFactory) {
-        this(source, sourceMode, history, robotFactory, false);
+            Supplier<RobotPort> robotFactory,
+            RobotProfile profile) {
+        this(source, sourceMode, history, robotFactory, false, profile);
     }
 
     public MonitorService(
@@ -52,7 +57,9 @@ public final class MonitorService implements AutoCloseable {
             String sourceMode,
             HistoryPort history,
             Supplier<RobotPort> robotFactory,
-            boolean recordDemoCycles) {
+            boolean recordDemoCycles,
+            RobotProfile profile) {
+        this.profile = profile;
         this.source = source;
         this.sourceMode = sourceMode;
         this.history = history;
@@ -62,7 +69,13 @@ public final class MonitorService implements AutoCloseable {
                 robotFactory == null
                         ? null
                         : new PhysicalMotionService(
-                                robotFactory, this::physicalTarget, this::visionHealthy, history);
+                                robotFactory,
+                                this::physicalScene,
+                                this::resetTracking,
+                                profile,
+                                history,
+                                source::deferTarget,
+                                source::setMotionActive);
         refreshHistory();
     }
 
@@ -124,7 +137,11 @@ public final class MonitorService implements AutoCloseable {
                     if (recordDemoCycles) history.saveOperation(completed, "simulation");
                     refreshHistory();
                     nextCycle = now + TimeUnit.MILLISECONDS.toNanos(2600);
-                } else if (!LocalDate.now(ZoneOffset.UTC).equals(summaryDay)) refreshHistory();
+                } else if (now >= nextHistoryRefresh
+                        || !LocalDate.now(ZoneOffset.UTC).equals(summaryDay)) {
+                    refreshHistory();
+                    nextHistoryRefresh = now + TimeUnit.SECONDS.toNanos(1);
+                }
             }
         } catch (RuntimeException e) {
             synchronized (lock) {
@@ -141,9 +158,41 @@ public final class MonitorService implements AutoCloseable {
 
     private Detection physicalTarget() {
         VisionPort.Observation value = observation;
-        return visionHealthy() && value != null && value.stableFrames() >= 50
+        return visionHealthy()
+                        && value != null
+                        && effectiveStableFrames(value) >= profile.integer("STABLE_FRAMES")
                 ? value.targetDetection()
                 : null;
+    }
+
+    private int effectiveStableFrames(VisionPort.Observation value) {
+        return value == null
+                ? 0
+                : (int)
+                        Math.min(
+                                profile.integer("STABLE_FRAMES"),
+                                Math.min(
+                                        value.stableFrames(),
+                                        Math.max(0, sequence - targetAfterSequence)));
+    }
+
+    private void resetTracking() {
+        synchronized (lock) {
+            targetAfterSequence = sequence;
+        }
+        source.resetTracking();
+    }
+
+    private PhysicalMotionService.Scene physicalScene() {
+        synchronized (lock) {
+            VisionPort.Observation value = observation;
+            return new PhysicalMotionService.Scene(
+                    sequence,
+                    value == null ? 0 : value.visibleCount(),
+                    physicalTarget(),
+                    visionHealthy(),
+                    value == null ? null : value.calibrationSha256());
+        }
     }
 
     public void physicalCommand(String action) {
@@ -171,7 +220,7 @@ public final class MonitorService implements AutoCloseable {
                                     : Detection.demo(summary.total());
                     if (target == null)
                         throw new IllegalStateException(
-                                "Se requieren 50 frames estables de plástico con confianza mínima de 0.80.");
+                                "Se requieren un objetivo estable con confianza mínima de 0.80.");
                     virtual.start(target);
                     autoCycle = false;
                     virtual.paused(false);
@@ -220,8 +269,8 @@ public final class MonitorService implements AutoCloseable {
                     new MonitorSnapshot.SimulationState(
                             virtual.paused(),
                             virtual.active(),
-                            view == null ? 0 : view.stableFrames(),
-                            50,
+                            effectiveStableFrames(view),
+                            profile.integer("STABLE_FRAMES"),
                             physicalTarget() != null),
                     detected,
                     target,
@@ -245,9 +294,13 @@ public final class MonitorService implements AutoCloseable {
             data.put("error", error);
             data.put("paused", virtual.paused());
             data.put("autoCycle", autoCycle);
-            data.put("cycleActive", virtual.active());
-            data.put("stableFrames", observation == null ? 0 : observation.stableFrames());
-            data.put("requiredStableFrames", 50);
+            data.put(
+                    "cycleActive",
+                    robot == null ? virtual.active() : robot.robotState().cycleActive());
+            data.put("stableFrames", effectiveStableFrames(observation));
+            data.put("requiredStableFrames", profile.integer("STABLE_FRAMES"));
+            data.put("provisionalDestinations", profile.provisionalDestinations());
+            data.put("destinations", profile.bins());
             data.put("frameSequence", sequence);
             return data;
         }
@@ -265,8 +318,6 @@ public final class MonitorService implements AutoCloseable {
             return frame();
         }
     }
-
-    public record Frame(long sequence, byte[] jpeg) {}
 
     public boolean running() {
         return running;

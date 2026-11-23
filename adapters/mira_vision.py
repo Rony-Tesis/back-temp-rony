@@ -1,4 +1,4 @@
-"""One worker owns capture and inference. No SSH, ROS or actuator adapter."""
+"""Notebook inference/filters, robot-owned calibration; no actuator access."""
 from pathlib import Path
 from urllib.request import urlopen
 from threading import Condition, Event, Thread
@@ -7,65 +7,95 @@ import time
 
 import cv2
 import numpy as np
-
+from runtime_profile import load_profile, robot_calibration
 from worker_support import LABELS, Observation
 
 
-def encode(frame) -> bytes:
-    ok, encoded = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+def encode(frame):
+    ok, encoded = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     if not ok:
-        raise ValueError("No se pudo codificar el frame.")
+        raise ValueError('No se pudo codificar el frame.')
     return encoded.tobytes()
 
 
-def pixel_to_target(u: float, v: float, width: int, height: int) -> tuple[float, float]:
-    # Calibration copied from MIRA. Scale camera coordinates to its reference resolution.
+def pixel_to_target(u, v, width, height, profile=None):
+    profile = profile or load_profile()
     if not all(math.isfinite(n) for n in (u, v, width, height)) or width <= 0 or height <= 0:
-        raise ValueError("Coordenadas inválidas.")
-    if not 0 <= u < width or not 0 <= v < height:
-        raise ValueError("El centro está fuera de la imagen.")
-    if abs(width / height - 4 / 3) > .01:
-        raise ValueError("El encuadre no coincide con la referencia de calibración 4:3.")
-    k = np.array([[421.7179870605469, 0, 331.8549044912379],
-                  [0, 464.7308349609375, 234.46281488904788], [0, 0, 1]])
-    r, _ = cv2.Rodrigues(np.array([-.07697136252374011, 3.086054291330642, .1219708621340273]))
+        raise ValueError('Coordenadas inválidas.')
+    if not 0 <= u < width or not 0 <= v < height or abs(width / height - 4 / 3) > .01:
+        raise ValueError('Encuadre fuera de la calibración 4:3.')
+    calibration, values = profile['calibration'], profile['values']
+    if calibration is None:
+        raise ValueError('Falta la calibración vigente del brazo.')
+    k = np.asarray(calibration['K'], dtype=np.float64)
+    r, _ = cv2.Rodrigues(np.asarray(calibration['R'], dtype=np.float64))
     inv_r = np.linalg.inv(r)
-    trans = inv_r @ np.array([-16.652967984876717, 51.4273611584664, 183.827498153882])
+    trans = inv_r @ np.asarray(calibration['T'], dtype=np.float64).reshape(3)
     ray = inv_r @ np.linalg.inv(k) @ np.array([u * 640 / width, v * 480 / height, 1.])
     if abs(ray[2]) < 1e-9:
-        raise ValueError("El rayo no intersecta el plano calibrado.")
+        raise ValueError('El rayo no intersecta el plano calibrado.')
     point = trans[2] / ray[2] * ray - trans
-    x, y = float(point[0]), -162.94 + float(point[1])
+    x, y = values['HOME_X'] + float(point[0]), values['HOME_Y'] + float(point[1])
     if not math.isfinite(x + y) or abs(x) > 1000 or abs(y) > 1000:
-        raise ValueError("La proyección excede el rango de visualización.")
+        raise ValueError('Proyección fuera de rango.')
     return x, y
 
 
-def describe_detection(category, confidence, u, v, width, height) -> dict:
+def describe_detection(category, confidence, u, v, width, height, profile=None):
+    profile = profile or load_profile()
     try:
-        x, y = pixel_to_target(u, v, width, height)
-        offset, target = {"x": x, "y": y + 162.94}, {"x": x, "y": y}
+        x, y = pixel_to_target(u, v, width, height, profile)
+        offset = {'x': x - profile['values']['HOME_X'], 'y': y - profile['values']['HOME_Y']}
+        target = {'x': x, 'y': y}
     except ValueError:
-        # Detection remains visible even when calibration cannot produce a valid projection.
         offset, target = None, None
-    return {"residue": LABELS[category], "shortName": LABELS[category], "category": category,
-            "confidence": confidence, "pixel": {"x": u, "y": v},
-            "offsetMm": offset, "targetMm": target,
-            "destination": f"Contenedor de {LABELS[category].lower()} (virtual)"}
+    return {'residue': LABELS[category], 'shortName': LABELS[category], 'category': category,
+            'confidence': confidence, 'pixel': {'x': u, 'y': v}, 'offsetMm': offset,
+            'targetMm': target, 'destination': LABELS[category] + ' · destino provisional'}
 
 
 class MiraVision:
-    def __init__(self, camera_url: str, model_path: Path):
-        if not model_path.is_file():
-            raise ValueError("No existe el modelo configurado.")
-        from ultralytics import YOLO
-        import torch
-        self.model = YOLO(str(model_path))
-        self.device = 0 if torch.cuda.is_available() else "cpu"
-        self.url = camera_url
-        self.capture = None
-        self.previous = None
-        self.stable = 0
+    def __init__(self, camera_url, model_path, profile=None, detector=None):
+        if detector is None and not model_path.is_file():
+            raise ValueError('No existe el modelo configurado.')
+        self.profile = profile if profile is not None else dict(load_profile(), calibration=None)
+        if detector is None:
+            from ultralytics import YOLO
+            import torch
+            self.model = YOLO(str(model_path))
+            self.device = 0 if torch.cuda.is_available() else 'cpu'
+        else:
+            self.model, self.device = detector, 'tensorrt'
+        if set(self.model.names.values()) != set(LABELS):
+            raise ValueError('Las clases del modelo no coinciden con el notebook.')
+        self.url, self.capture = camera_url, None
+        self.calibration_sha = None
+        self.deferred = []
+        self.motion_active = False
+        self.reset_tracking()
+
+    def set_calibration(self, packet):
+        calibration, sha = robot_calibration(packet) if packet is not None else (None, None)
+        if sha != self.calibration_sha or self.profile['calibration'] != calibration:
+            self.profile = dict(self.profile, calibration=calibration)
+            self.calibration_sha = sha
+            self.deferred = []
+            self.reset_tracking()
+
+    def reset_tracking(self):
+        self.previous, self.stable = None, 0
+
+    def defer_target(self, category, x, y):
+        if category not in self.profile['enabledCategories'] or not all(math.isfinite(n) for n in (x, y)):
+            raise ValueError('Residuo omitido inválido.')
+        self.deferred = [item for item in self.deferred if not self._near_deferred(category, x, y, item)]
+        self.deferred.append({'category': category, 'x': x, 'y': y, 'absent': 0})
+        self.deferred = self.deferred[-32:]
+        self.reset_tracking()
+
+    def _near_deferred(self, category, x, y, item):
+        return (category == item['category'] and math.hypot(x - item['x'], y - item['y'])
+                < self.profile['values']['REPEAT_RADIUS_MM'])
 
     def _frame(self):
         if self.capture is None:
@@ -73,58 +103,75 @@ class MiraVision:
         jpeg = self.capture.read()
         frame = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
         if frame is None:
-            raise ValueError("JPEG inválido.")
+            raise ValueError('JPEG inválido.')
         return frame
 
-    def read(self) -> Observation:
+    def read(self):
+        p, v = self.profile, self.profile['values']
         try:
             frame = self._frame()
-            result = self.model.predict(frame, imgsz=640, conf=.20, iou=.45, device=self.device, verbose=False)[0]
+            result = self.model.predict(frame, imgsz=v['IMGSZ'], conf=v['CONF'], iou=v['IOU'],
+                       agnostic_nms=v['AGNOSTIC_NMS'], max_det=v['MAX_DET'],
+                       quantize=16 if self.device != 'cpu' else 32,
+                       device=self.device, verbose=False)[0]
         except Exception:
             self.close()
-            self.previous, self.stable = None, 0
+            self.reset_tracking()
             raise
-        candidates = []
-        visible = []
-        for box in result.boxes:
-            category = result.names[int(box.cls[0])]
-            confidence = float(box.conf[0])
+        candidates, visible, boxes = [], [], []
+        height, width = frame.shape[:2]
+        for box in result.boxes or []:
+            category, confidence = result.names[int(box.cls[0])], float(box.conf[0])
             x1, y1, x2, y2 = map(float, box.xyxy[0])
-            if category not in LABELS or not math.isfinite(confidence) or confidence < .20:
+            if (category not in LABELS or not all(math.isfinite(x) for x in (confidence, x1, y1, x2, y2))
+                    or confidence < v['CONF'] or min(x2-x1, y2-y1) < v['MIN_BOX_SIDE_PX']
+                    or (x2-x1)*(y2-y1)/(width*height) > v['MAX_BOX_AREA_RATIO']
+                    or min(x1, y1) < v['EDGE_MARGIN_PX']
+                    or x2 > width-v['EDGE_MARGIN_PX'] or y2 > height-v['EDGE_MARGIN_PX']):
                 continue
-            u, v = (x1 + x2) / 2, (y1 + y2) / 2
-            item = describe_detection(category, confidence, u, v, frame.shape[1], frame.shape[0])
+            item = describe_detection(category, confidence, (x1+x2)/2, (y1+y2)/2, width, height, p)
+            boxes.append((x1, y1, x2, y2, category, confidence))
+            xy = item['targetMm']
+            in_bin = xy is not None and any(math.hypot(xy['x']-b['positionMm'][0], xy['y']-b['positionMm'][1])
+                      < v['DROP_EXCLUSION_MM'] for b in p['bins'].values())
+            if in_bin:
+                continue
             visible.append(item)
-            if category == "plastic" and confidence >= .80:
-                candidates.append(((x1 + x2) / 2, (y1 + y2) / 2, confidence))
-        detection = None
+            workspace = p['workspaceMm']
+            reachable = xy is not None and (workspace['x'][0] <= xy['x'] <= workspace['x'][1]
+                         and workspace['y'][0] <= xy['y'] <= workspace['y'][1])
+            if category in p['enabledCategories'] and confidence >= v['AUTO_MIN_CONF'] and reachable:
+                candidates.append(item)
+        if not self.motion_active:
+            for item in self.deferred:
+                seen = any(d['targetMm'] is not None and self._near_deferred(
+                    d['category'], d['targetMm']['x'], d['targetMm']['y'], item) for d in visible)
+                item['absent'] = 0 if seen else item['absent'] + 1
+        self.deferred = [item for item in self.deferred if item['absent'] < v['EMPTY_CONFIRM_FRAMES']]
+        candidates = [d for d in candidates if not any(self._near_deferred(
+            d['category'], d['targetMm']['x'], d['targetMm']['y'], item) for item in self.deferred)]
+        target = None
         if candidates:
-            chosen = max(candidates, key=lambda p: p[2]) if self.previous is None else min(
-                candidates, key=lambda p: math.hypot(p[0] - self.previous[0], p[1] - self.previous[1]))
-            u, v, confidence = chosen
-            jump = math.inf if self.previous is None else math.hypot(u - self.previous[0], v - self.previous[1])
-            self.stable = self.stable + 1 if jump <= 30 else 1
-            if self.previous:
-                u, v = .2 * self.previous[0] + .8 * u, .2 * self.previous[1] + .8 * v
-            self.previous = (u, v)
-            try:
-                pixel_to_target(u, v, frame.shape[1], frame.shape[0])
-                detection = describe_detection("plastic", confidence, u, v, frame.shape[1], frame.shape[0])
-            except ValueError:
-                self.stable = 0
+            previous = self.previous
+            same_class = [d for d in candidates if previous is not None and d['category'] == previous['category']]
+            chosen = (min(same_class, key=lambda d: math.hypot(d['pixel']['x']-previous['pixel']['x'],
+                       d['pixel']['y']-previous['pixel']['y'])) if same_class else
+                       max(candidates, key=lambda d: d['confidence']))
+            jump = math.inf if previous is None or chosen['category'] != previous['category'] else math.hypot(
+                   chosen['pixel']['x']-previous['pixel']['x'], chosen['pixel']['y']-previous['pixel']['y'])
+            self.stable = self.stable + 1 if jump <= v['MAX_PIXEL_JUMP'] else 1
+            self.previous, target = chosen, chosen
         else:
-            self.previous, self.stable = None, 0
-        # Own writable array: avoids read-only output arrays and automatic font downloads.
+            self.reset_tracking()
         annotated = frame.copy()
-        for box in result.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            category = result.names[int(box.cls[0])]
-            label = {"plastic": "plastico", "cardboard": "carton", "aluminum": "aluminio"}.get(category, category)
-            cv2.rectangle(annotated, (x1, y1), (x2, y2), (60, 220, 80), 2)
-            cv2.putText(annotated, f"{label} {float(box.conf[0]):.2f}", (x1, max(20, y1 - 7)), cv2.FONT_HERSHEY_SIMPLEX, .55, (60, 220, 80), 2)
-        cv2.putText(annotated, "MIRA / CAMARA REAL", (12, 28), cv2.FONT_HERSHEY_SIMPLEX, .6, (0, 255, 255), 2)
-        representative = detection or (max(visible, key=lambda item: item["confidence"]) if visible else None)
-        return Observation(encode(annotated), representative, self.stable, detection)
+        for x1, y1, x2, y2, category, confidence in boxes:
+            cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (60, 220, 80), 2)
+            label = {'plastic': 'plastico', 'cardboard': 'carton', 'aluminum': 'aluminio'}[category]
+            cv2.putText(annotated, f'{label} {confidence:.2f}', (int(x1), max(20, int(y1)-7)),
+                        cv2.FONT_HERSHEY_SIMPLEX, .55, (60, 220, 80), 2)
+        cv2.putText(annotated, 'RONY / CAMARA REAL', (12, 28), cv2.FONT_HERSHEY_SIMPLEX, .6, (0, 255, 255), 2)
+        representative = target or (max(visible, key=lambda d: d['confidence']) if visible else None)
+        return Observation(encode(annotated), representative, self.stable, target, len(visible))
 
     def close(self):
         if self.capture:

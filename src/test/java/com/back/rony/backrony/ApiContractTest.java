@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.back.rony.backrony.monitoring.application.MonitorService;
+import com.back.rony.backrony.monitoring.application.port.MonitorPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @ActiveProfiles("test")
 class ApiContractTest {
     @Autowired MockMvc mvc;
-    @Autowired MonitorService monitor;
+    @Autowired MonitorPort monitor;
 
     @Test
     void snapshotKeepsExistingAngularFieldsAndPhysicalObjectIsNull() throws Exception {

@@ -10,7 +10,20 @@ public record Operation(
         String category,
         double confidence,
         String result,
-        long durationMs) {
+        long durationMs,
+        String destination,
+        Boolean depositConfirmed) {
+    public Operation(
+            String id,
+            Instant completedAt,
+            String residue,
+            String category,
+            double confidence,
+            String result,
+            long durationMs) {
+        this(id, completedAt, residue, category, confidence, result, durationMs, null, null);
+    }
+
     public Operation {
         completedAt = completedAt.truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
     }

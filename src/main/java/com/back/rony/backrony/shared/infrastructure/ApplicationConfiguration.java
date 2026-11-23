@@ -1,11 +1,14 @@
 package com.back.rony.backrony.shared.infrastructure;
 
 import com.back.rony.backrony.history.application.port.HistoryPort;
+import com.back.rony.backrony.monitoring.application.CloudDeviceRelay;
 import com.back.rony.backrony.monitoring.application.MonitorService;
+import com.back.rony.backrony.monitoring.application.port.MonitorPort;
 import com.back.rony.backrony.monitoring.application.port.VisionPort;
 import com.back.rony.backrony.monitoring.infrastructure.MiraVisionAdapter;
 import com.back.rony.backrony.monitoring.infrastructure.SimulatedVisionAdapter;
-import com.back.rony.backrony.robotics.infrastructure.JetMaxRobotAdapter;
+import com.back.rony.backrony.robotics.domain.RobotProfile;
+import com.back.rony.backrony.robotics.infrastructure.HttpRobotAdapter;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
@@ -19,32 +22,71 @@ import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 public class ApplicationConfiguration {
+    @Bean
+    RobotProfile robotProfile(RonyProperties properties, ObjectMapper mapper) {
+        return ProfileLoader.load(properties.runtimeProfile(), mapper);
+    }
+
     @Bean(destroyMethod = "close")
-    MonitorService monitor(
+    MonitorPort monitor(
             RonyProperties properties,
             HistoryPort history,
             ObjectMapper mapper,
-            @Value("${rony.record-demo-cycles:false}") boolean recordDemoCycles) {
-        VisionPort source =
-                "live".equals(properties.sourceMode())
-                        ? new MiraVisionAdapter(properties, mapper)
-                        : new SimulatedVisionAdapter(properties.framesPerSecond());
+            RobotProfile profile,
+            @Value("${rony.execution-location:pc}") String executionLocation,
+            @Value("${rony.device-id:jetmax-01}") String deviceId,
+            @Value("${rony.record-demo-cycles:false}") boolean recordDemoCycles,
+            @Value("${rony.allow-test-agent:false}") boolean allowTestAgent) {
+        if ("cloud".equals(executionLocation)) {
+            if (properties.accessToken() == null || properties.accessToken().length() < 24) {
+                throw new IllegalArgumentException(
+                        "Configura una clave web privada para el servidor.");
+            }
+            return new CloudDeviceRelay(history, profile, deviceId);
+        }
+        if (!"pc".equals(executionLocation))
+            throw new IllegalArgumentException("Ubicación de ejecución inválida.");
+        VisionPort source;
+        if ("live".equals(properties.sourceMode())) {
+            var calibrationClient =
+                    new HttpRobotAdapter(
+                            properties.robotAgentUrl(),
+                            properties.robotAgentToken(),
+                            profile,
+                            mapper,
+                            allowTestAgent);
+            source =
+                    new MiraVisionAdapter(
+                            properties,
+                            mapper,
+                            calibrationClient::readCalibration,
+                            calibrationClient::close);
+        } else {
+            source = new SimulatedVisionAdapter(properties.framesPerSecond());
+        }
         return new MonitorService(
                 source,
                 properties.sourceMode(),
                 history,
                 properties.physicalMotion() && "live".equals(properties.sourceMode())
-                        ? () -> new JetMaxRobotAdapter(properties, mapper)
+                        ? () ->
+                                new HttpRobotAdapter(
+                                        properties.robotAgentUrl(),
+                                        properties.robotAgentToken(),
+                                        profile,
+                                        mapper,
+                                        allowTestAgent)
                         : null,
-                recordDemoCycles);
+                recordDemoCycles,
+                profile);
     }
 
     @Bean
-    WorkerStartup workerStartup(MonitorService monitor, RonyProperties properties) {
+    WorkerStartup workerStartup(MonitorPort monitor, RonyProperties properties) {
         return new WorkerStartup(monitor, properties);
     }
 
-    record WorkerStartup(MonitorService monitor, RonyProperties properties) {
+    record WorkerStartup(MonitorPort monitor, RonyProperties properties) {
         @EventListener(ApplicationReadyEvent.class)
         public void start() {
             if (properties.workersEnabled()) monitor.start();

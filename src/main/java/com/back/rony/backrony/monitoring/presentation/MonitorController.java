@@ -1,7 +1,7 @@
 package com.back.rony.backrony.monitoring.presentation;
 
-import com.back.rony.backrony.monitoring.application.MonitorService;
 import com.back.rony.backrony.monitoring.application.MonitorSnapshot;
+import com.back.rony.backrony.monitoring.application.port.MonitorPort;
 import com.back.rony.backrony.shared.infrastructure.RonyProperties;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,12 +23,11 @@ import tools.jackson.databind.ObjectMapper;
 @SecurityRequirement(name = "bearerToken")
 @SecurityRequirement(name = "sessionCookie")
 public class MonitorController {
-    private final MonitorService monitor;
+    private final MonitorPort monitor;
     private final ObjectMapper mapper;
     private final Semaphore streams;
 
-    public MonitorController(
-            MonitorService monitor, ObjectMapper mapper, RonyProperties properties) {
+    public MonitorController(MonitorPort monitor, ObjectMapper mapper, RonyProperties properties) {
         this.monitor = monitor;
         this.mapper = mapper;
         streams = new Semaphore(properties.maximumStreams());
@@ -109,7 +108,7 @@ public class MonitorController {
                     long sequence = -1;
                     try {
                         while (monitor.running()) {
-                            MonitorService.Frame frame;
+                            MonitorPort.Frame frame;
                             try {
                                 frame = monitor.waitFrame(sequence);
                             } catch (InterruptedException e) {

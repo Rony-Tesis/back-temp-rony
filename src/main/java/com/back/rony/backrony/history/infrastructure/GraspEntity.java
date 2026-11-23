@@ -42,6 +42,6 @@ public class GraspEntity {
         confidence = target.confidence();
         targetX = target.targetMm().x();
         targetY = target.targetMm().y();
-        gripperAngle = 82;
+        gripperAngle = 80;
     }
 }

@@ -6,6 +6,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        name = "rony.web-portal",
+        havingValue = "false",
+        matchIfMissing = true)
 public class InformationController {
     @GetMapping("/")
     @Operation(summary = "Consultar la información de la API")

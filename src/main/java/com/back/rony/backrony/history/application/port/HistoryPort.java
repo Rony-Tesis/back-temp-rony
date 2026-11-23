@@ -8,6 +8,13 @@ import java.util.List;
 public interface HistoryPort {
     void saveOperation(Operation operation, String sourceMode);
 
+    default void saveRemoteOperation(Operation operation) {
+        if (recentOperations().stream()
+                .noneMatch(existing -> existing.id().equals(operation.id()))) {
+            saveOperation(operation, "live");
+        }
+    }
+
     List<Operation> recentOperations();
 
     Summary summary(Instant since);
@@ -16,10 +23,24 @@ public interface HistoryPort {
 
     void saveGrasp(Detection target);
 
+    default long countPhysicalCycles() {
+        return 0;
+    }
+
     record Summary(
             long processedToday,
             long total,
             long successful,
             long failed,
-            double averageDurationMs) {}
+            double averageDurationMs,
+            long unverified) {
+        public Summary(
+                long processedToday,
+                long total,
+                long successful,
+                long failed,
+                double averageDurationMs) {
+            this(processedToday, total, successful, failed, averageDurationMs, 0);
+        }
+    }
 }

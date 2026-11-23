@@ -12,6 +12,8 @@ public interface ClassificationJpaRepository extends JpaRepository<Classificatio
 
     long countByResult(String result);
 
+    long countBySourceModeAndResult(String sourceMode, String result);
+
     @Query("select coalesce(avg(o.durationMs), 0) from ClassificationEntity o")
     double averageDuration();
 }

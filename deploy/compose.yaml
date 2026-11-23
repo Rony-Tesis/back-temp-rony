@@ -1,0 +1,52 @@
+services:
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RONY_DOMAIN: ${RONY_DOMAIN:?Configure the real domain}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+  api:
+    build:
+      context: ../..
+      dockerfile: back-temp-rony/deploy/Dockerfile
+    restart: unless-stopped
+    environment:
+      RONY_ALLOWED_HOSTS: ${RONY_DOMAIN:?Configure the real domain}
+      RONY_ACCESS_TOKEN: ${RONY_WEB_ACCESS_TOKEN:?Private browser credential required}
+      RONY_DEVICE_ID: jetmax-01
+      RONY_DEVICE_TOKEN: ${RONY_DEVICE_TOKEN:?Private robot credential required}
+      RONY_DB_HOST: db
+      RONY_DB_NAME: rony
+      RONY_DB_USER: rony
+      RONY_DB_PASSWORD: ${RONY_DB_PASSWORD:?Private database credential required}
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: rony
+      MYSQL_USER: rony
+      MYSQL_PASSWORD: ${RONY_DB_PASSWORD:?Private database credential required}
+      MYSQL_ROOT_PASSWORD: ${RONY_DB_ROOT_PASSWORD:?Private root credential required}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+volumes:
+  mysql_data:
+  caddy_data:
+  caddy_config:

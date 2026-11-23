@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @Controller
 @ConditionalOnProperty(name = "rony.web-portal", havingValue = "true")
 public class WebPortalController {
-    @GetMapping({"/dashboard", "/monitoring", "/classifications"})
+    @GetMapping({"/", "/dashboard", "/monitoring", "/classifications"})
     public String portal() {
         return "forward:/index.html";
     }

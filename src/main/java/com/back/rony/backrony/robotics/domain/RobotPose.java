@@ -31,18 +31,23 @@ public record RobotPose(double x, double y, double z, double gripperAngle, Joint
 
     public record Position(double x, double y, double z) {
         public Position {
+            boolean storage =
+                    Math.abs(x + 42.6878) < .0001
+                            && Math.abs(y + 27.0905) < .0001
+                            && Math.abs(z - 225.0) < .0001;
             if (!Double.isFinite(x)
                     || !Double.isFinite(y)
                     || !Double.isFinite(z)
-                    || x < -100
-                    || x > 100
-                    || y < -240
-                    || y > -90
+                    || x < -250
+                    || x > 250
+                    || y < -250
+                    || y > 250
                     || z < 90
-                    || z > 213
-                    || Math.hypot(x, y) < 50) {
+                    || (z > 213 && !storage)
+                    || Math.hypot(x, y) < 50
+                    || Math.hypot(x, y) > 270) {
                 throw new IllegalArgumentException(
-                        "Objetivo fuera de la zona calibrada de prueba.");
+                        "Posición fuera del espacio de movimiento permitido.");
             }
         }
     }

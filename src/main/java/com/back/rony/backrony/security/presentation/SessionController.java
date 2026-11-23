@@ -41,7 +41,7 @@ public class SessionController {
                         .httpOnly(true)
                         .sameSite("Strict")
                         .secure(request.isSecure())
-                        .path("/api")
+                        .path("/")
                         .maxAge(3600)
                         .build();
         return ResponseEntity.ok()

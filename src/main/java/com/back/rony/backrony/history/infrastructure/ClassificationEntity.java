@@ -35,6 +35,12 @@ public class ClassificationEntity {
     @Column(name = "source_mode", nullable = false, length = 16)
     private String sourceMode;
 
+    @Column(length = 160)
+    private String destination;
+
+    @Column(name = "deposit_confirmed")
+    private Boolean depositConfirmed;
+
     protected ClassificationEntity() {}
 
     public ClassificationEntity(Operation o, String source) {
@@ -46,9 +52,20 @@ public class ClassificationEntity {
         result = o.result();
         durationMs = o.durationMs();
         sourceMode = source;
+        destination = o.destination();
+        depositConfirmed = o.depositConfirmed();
     }
 
     public Operation toDomain() {
-        return new Operation(id, completedAt, residue, category, confidence, result, durationMs);
+        return new Operation(
+                id,
+                completedAt,
+                residue,
+                category,
+                confidence,
+                result,
+                durationMs,
+                destination,
+                depositConfirmed);
     }
 }
