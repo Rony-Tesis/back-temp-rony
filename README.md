@@ -43,6 +43,14 @@ Todavía no se eligieron servidor ni dominio. No se contrató ni publicó ningú
 
 Comandos de mantenimiento del nuevo servicio: `systemctl status rony-edge` y `journalctl -u rony-edge -n 80 --no-pager`. Para volver al banco, detener `rony-edge` y habilitar/iniciar `rony-agent`; nunca operar ambos controladores simultáneamente. `run.ps1 -Mode Physical` conserva el **banco anterior**, con YOLO en el PC; no es el arranque de la arquitectura autónoma final.
 
+### Inicio manual para compartir el brazo
+
+`rony-edge` queda deshabilitado para el arranque del equipo. Encender el JetMax no inicia nuestro YOLO ni el controlador; los servicios originales siguen disponibles para otros trabajos. En un equipo instalado con la versión anterior, ejecutar una vez `sudo systemctl disable --now rony-edge.service`, con la clasificación detenida y sin movimiento activo.
+
+Cuando se vaya a usar Rony, conectar el WiFi y ejecutar `sudo systemctl start rony-edge.service`. Al terminar, cancelar la clasificación desde la web, esperar el tramo en curso y ejecutar `sudo systemctl stop rony-edge.service`; esto termina nuestro proceso y libera los recursos de YOLO. Los comandos se ejecutan por SSH en el JetMax. Después de iniciarlo se puede cerrar SSH: el servicio continúa activo. La clasificación física se habilita desde Monitoreo y no comienza solo por iniciar el servicio.
+
+`activate-edge.ps1` es una instalación/actualización con arranque explícito para verificar la telemetría, no el comando de uso diario. También deja deshabilitado el arranque del equipo. Si solo se desea instalar la actualización y dejar el programa apagado, detenerlo al terminar esa comprobación. `Restart=on-failure` recupera fallos durante una sesión iniciada manualmente; no vuelve a arrancar el servicio después de un `systemctl stop` ni habilita el inicio con el equipo.
+
 ## Netlify, Render y Aiven
 
 Las direcciones públicas son `https://rony-brazo.netlify.app` y `https://rony-api.onrender.com`. La configuración local del JetMax ya puede prepararse con `./prepare-render.ps1 -ApiUrl https://rony-api.onrender.com`. Netlify conserva `/api` en el origen del navegador mediante su proxy HTTPS.

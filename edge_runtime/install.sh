@@ -41,7 +41,8 @@ install -m 755 "$bundle_dir/start.sh" /opt/rony-edge/start.sh
 install -m 600 -o root -g root "$bundle_dir/edge.env" /etc/rony-edge/edge.env
 install -m 644 "$bundle_dir/rony-edge.service" /etc/systemd/system/rony-edge.service
 systemctl daemon-reload
-systemctl enable rony-edge.service
+# Installation/activation is an explicit start. Keep future boots free for other robot work.
+systemctl disable rony-edge.service
 systemctl start rony-edge.service
 sleep 2
 if ! systemctl is-active --quiet rony-edge.service; then
@@ -51,4 +52,7 @@ if ! systemctl is-active --quiet rony-edge.service; then
 fi
 trap - ERR
 systemctl disable rony-agent.service 2>/dev/null || true
-echo 'Autonomous runtime active. Startup only observes; activation comes from the HTTPS web/API.'
+echo 'Runtime started for this installation; boot autostart is disabled.'
+echo 'Start manually: sudo systemctl start rony-edge.service'
+echo 'Stop and release YOLO resources: sudo systemctl stop rony-edge.service'
+echo 'Starting the service only observes; enable classification from the HTTPS web/API.'

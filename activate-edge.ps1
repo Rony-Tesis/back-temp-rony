@@ -18,6 +18,7 @@ catch { $agent = $null }
 if ($agent -and $agent.job -and $agent.job.state -eq 'running') { throw 'The bench executor still has an active trajectory.' }
 Write-Host 'Installs only our autonomous service. YOLO and all classification will run on the JetMax.'
 Write-Host 'Vendor ROS/calibration stay unchanged. Startup observes; enable motion from the HTTPS web.'
+Write-Host 'This command starts the service now. Boot autostart stays disabled; use systemctl start/stop rony-edge.'
 Write-Host 'The robot must have internet. Its UTC clock is synchronized for TLS before installation.'
 $archive = Join-Path $PSScriptRoot 'edge_runtime/dist/rony-edge.tar.gz'
 & scp $archive "${robotUser}@${RobotHost}:rony-edge.tar.gz"
@@ -42,4 +43,5 @@ $receiptPath = Join-Path $PSScriptRoot 'data/jetson-online-status.json'
 New-Item -ItemType Directory -Force -Path (Split-Path $receiptPath -Parent) | Out-Null
 [IO.File]::WriteAllText($receiptPath, (($onlineState | ConvertTo-Json -Depth 12) + "`n"), [Text.UTF8Encoding]::new($false))
 Write-Host 'JetMax telemetry confirmed in the public HTTPS API. Startup sent no motion commands.'
+Write-Host 'Boot autostart is disabled. For future sessions: sudo systemctl start rony-edge.service'
 Write-Host ('Open ' + $configuration.frontend_url + '/monitoring to inspect state before enabling classification.')
