@@ -330,6 +330,10 @@ public final class CloudDeviceRelay implements MonitorPort {
         return camera.open(boot, channel);
     }
 
+    public boolean acceptsVideoBoot(String boot) {
+        return camera.accepts(boot);
+    }
+
     public boolean videoFrame(String boot, String channel, long sourceSequence, byte[] jpeg) {
         return camera.receive(boot, channel, sourceSequence, jpeg);
     }

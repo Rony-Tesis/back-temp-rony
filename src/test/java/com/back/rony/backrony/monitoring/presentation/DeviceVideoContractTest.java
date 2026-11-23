@@ -85,6 +85,19 @@ class DeviceVideoContractTest {
     }
 
     @Test
+    void unregisteredBootIsRejectedBeforeUpgradeWithoutAttachingToTheRealCamera() {
+        var invalid =
+                assertThrows(
+                        java.util.concurrent.CompletionException.class,
+                        () ->
+                                builder(DEVICE, UUID.randomUUID().toString())
+                                        .buildAsync(uri(), new WebSocket.Listener() {})
+                                        .join());
+        assertEquals(
+                409, ((WebSocketHandshakeException) invalid.getCause()).getResponse().statusCode());
+    }
+
+    @Test
     void upgradeRejectsBrowserCredentialsAndOriginsBeforeAcceptingImages() {
         String boot = UUID.randomUUID().toString();
         var invalid =

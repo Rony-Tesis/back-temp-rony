@@ -28,10 +28,14 @@ final class DeviceCamera {
     }
 
     synchronized boolean open(String nextBoot, String channel) {
-        if (!fresh() || !nextBoot.equals(boot)) return false;
+        if (!accepts(nextBoot)) return false;
         uploader = channel;
         sourceSequence = -1;
         return true;
+    }
+
+    synchronized boolean accepts(String nextBoot) {
+        return fresh() && nextBoot.equals(boot);
     }
 
     synchronized boolean receive(String nextBoot, String channel, long source, byte[] bytes) {

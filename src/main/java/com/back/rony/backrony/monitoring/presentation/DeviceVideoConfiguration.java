@@ -60,6 +60,12 @@ public class DeviceVideoConfiguration implements WebSocketConfigurer {
                                     response.setStatusCode(HttpStatus.BAD_REQUEST);
                                     return false;
                                 }
+                                // Reject before HTTP 101 so proxies do not keep an unattached
+                                // stream.
+                                if (!relay.acceptsVideoBoot(boot)) {
+                                    response.setStatusCode(HttpStatus.CONFLICT);
+                                    return false;
+                                }
                                 attributes.put("boot", boot);
                                 return true;
                             }
