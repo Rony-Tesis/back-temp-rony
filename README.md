@@ -45,6 +45,8 @@ Comandos de mantenimiento del nuevo servicio: `systemctl status rony-edge` y `jo
 
 ## Netlify, Render y Aiven
 
+El perfil `render` permite 45 s para obtener/iniciar sesión en una conexión de la base y un margen inicial de 60 s. El valor de 5 s del banco local también limita el login JDBC y puede caducar durante el primer handshake TLS en una instancia con poca CPU. TCP y lecturas JDBC tienen límites de 30 s. Los plazos siguen acotados y se mantiene la verificación de certificado y hostname; no es necesario cambiar credenciales o desactivar SSL por este error.
+
 El front publicado es `https://rony-brazo.netlify.app`. El `Dockerfile` de la raíz del backend construye únicamente este repositorio con Java 21; no necesita Angular, Python, YOLO ni los otros repositorios dentro de Render. `deploy/Dockerfile` conserva la alternativa de servidor unificado anterior y no se debe seleccionar para este despliegue.
 
 1. Guardar las credenciales de Aiven en `deploy/.env.aiven` y su CA en `deploy/aiven-ca.pem`, ambos ignorados por Git. Ejecutar `./prepare-render.ps1`. Conserva la clave web, genera una clave distinta para el JetMax si falta y prepara `deploy/.env.render` para importar en Render. No publica servicios ni modifica el brazo.
