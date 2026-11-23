@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / 'adapters' if (ROOT / 'adapters').exists() else RO
 from agent import Executor, Profile, RosDriver
 from controller import Controller
 from outbox import Outbox
+from video import VideoClient
 
 LOG = logging.getLogger('rony.edge')
 
@@ -32,6 +33,8 @@ class Vision:
         self.driver, self.profile, self.model_directory, self.camera_url = driver, profile, model_directory, camera_url
         self.lock, self.stop_event, self.actions = threading.RLock(), threading.Event(), queue.Queue()
         self.sequence, self.observation, self.at, self.calibration, self.fps = 0, None, 0., None, 0.
+        self.capture, self.overlay = None, []
+        self.overlay_at, self.motion_active = 0., False
         self.thread = threading.Thread(target=self.run, name='rony-local-yolo', daemon=True)
 
     def latest(self):
@@ -42,21 +45,33 @@ class Vision:
     def defer_target(self, target): self.actions.put(('defer', target))
     def set_motion_active(self, active): self.actions.put(('motion', active))
 
+    def preview(self, after):
+        with self.lock:
+            capture = self.capture
+            boxes = self.overlay if not self.motion_active and time.monotonic() - self.overlay_at < .3 else []
+        if capture is None:
+            raise TimeoutError('Cámara iniciándose')
+        sequence, jpeg, captured_at = capture.latest(after, timeout=.25)
+        return sequence, jpeg, captured_at, boxes
+
     def run(self):
-        from mira_vision import MiraVision
+        from mira_vision import MiraVision, LatestMjpegCapture
         from yolo_tensorrt import TensorRtYolo
         detector, source = None, None
         try:
             detector = TensorRtYolo(self.model_directory)
+            with self.lock:
+                self.capture = LatestMjpegCapture(self.camera_url)
             source = MiraVision(self.camera_url, Path(self.model_directory) / 'yolo11n.engine',
-                                dict(self.profile.data, calibration=None), detector=detector)
+                                dict(self.profile.data, calibration=None), detector=detector, capture=self.capture)
             while not self.stop_event.is_set():
                 frame_started = time.monotonic()
                 try:
                     while not self.actions.empty():
                         action, payload = self.actions.get_nowait()
                         if action == 'reset': source.reset_tracking()
-                        elif action == 'motion': source.motion_active = payload
+                        elif action == 'motion':
+                            source.motion_active = self.motion_active = payload
                         elif action == 'defer': source.defer_target(payload['category'], payload['targetMm']['x'], payload['targetMm']['y'])
                     source.set_calibration(self.driver.calibration())
                     observation = source.read()
@@ -65,6 +80,7 @@ class Vision:
                         self.fps = min(240., 1. / max(.001, now - self.at)) if self.at else 0.
                         self.sequence, self.observation, self.at = self.sequence + 1, observation, now
                         self.calibration = source.calibration_sha
+                        self.overlay, self.overlay_at = list(source.preview_boxes), now
                     self.stop_event.wait(max(.0, self.profile.values['DETECTION_PERIOD'] - (now - frame_started)))
                 except Exception:
                     with self.lock:
@@ -76,6 +92,7 @@ class Vision:
             LOG.exception('No se pudo iniciar YOLO dentro del JetMax')
         finally:
             if source: source.close()
+            if self.capture: self.capture.close()
             if detector: detector.close()
 
     def close(self):
@@ -106,6 +123,8 @@ class CloudClient:
         self.path = parsed.path.rstrip('/') + '/api/v1/device/exchange'
         self.poll_seconds = .2
         self.last_response, self.sequence, self.acknowledged = 0., 0, []
+        self.video = None
+        self.last_snapshot = 0.
         self.stop_event = threading.Event()
         self.thread = threading.Thread(target=self.run, name='rony-cloud-https', daemon=True)
 
@@ -115,8 +134,11 @@ class CloudClient:
         self.sequence += 1
         packet = self.controller.packet(self.device_id, self.sequence)
         _, observation, at, _ = self.controller.vision.latest()
-        if observation and time.monotonic() - at < 5 and len(observation.jpeg) <= 300000:
+        video_healthy = self.video is not None and self.video.healthy()
+        if (not video_healthy and time.monotonic() - self.last_snapshot >= .2
+                and observation and time.monotonic() - at < 5 and len(observation.jpeg) <= 300000):
             packet['jpeg'] = base64.b64encode(observation.jpeg).decode('ascii')
+            self.last_snapshot = time.monotonic()
         packet['acknowledgedCommands'] = self.acknowledged[-32:]
         body = json.dumps(packet, ensure_ascii=False, allow_nan=False).encode('utf-8')
         self.connection.request('POST', self.path, body=body, headers={'Authorization': 'Bearer ' + self.token,
@@ -222,6 +244,8 @@ def main():
     client_ref = []
     controller = Controller(executor, vision, outbox, lambda: bool(client_ref and client_ref[0].healthy()))
     client = CloudClient(api, token, os.environ.get('RONY_DEVICE_ID', 'jetmax-01'), controller)
+    video = VideoClient(api, token, controller.boot_id, vision, client.healthy)
+    client.video = video
     client_ref.append(client)
     stop = threading.Event()
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -229,11 +253,13 @@ def main():
     try:
         vision.thread.start()
         client.thread.start()
+        video.thread.start()
         LOG.info('YOLO y ciclo en JetMax; conexión saliente HTTPS; arranque sin movimiento')
         while not stop.wait(.1):
             controller.tick()
     finally:
         executor.close()
+        video.close()
         client.close()
         vision.close()
         outbox.close()

@@ -30,12 +30,13 @@ restore_previous() {
 trap restore_previous ERR
 systemctl stop rony-edge.service 2>/dev/null || true
 systemctl stop rony-agent.service 2>/dev/null || true
-install -d -m 755 /opt/rony-edge/{robot_agent,adapters,model}
+install -d -m 755 /opt/rony-edge/{robot_agent,adapters,model,vendor}
 install -d -m 750 -o root -g hiwonder /etc/rony-edge
 install -d -m 700 -o hiwonder -g hiwonder /var/lib/rony-edge
 install -m 644 "$bundle_dir/"*.py "$bundle_dir/rony_profile.json" /opt/rony-edge/
 install -m 644 "$bundle_dir/robot_agent/agent.py" /opt/rony-edge/robot_agent/
 install -m 644 "$bundle_dir/adapters/"*.py /opt/rony-edge/adapters/
+install -m 644 "$bundle_dir/vendor/"*.whl /opt/rony-edge/vendor/
 install -m 644 "$model_dir/yolo11n.engine" "$model_dir/engine.json" /opt/rony-edge/model/
 install -m 755 "$bundle_dir/start.sh" /opt/rony-edge/start.sh
 install -m 600 -o root -g root "$bundle_dir/edge.env" /etc/rony-edge/edge.env

@@ -55,7 +55,7 @@ def describe_detection(category, confidence, u, v, width, height, profile=None):
 
 
 class MiraVision:
-    def __init__(self, camera_url, model_path, profile=None, detector=None):
+    def __init__(self, camera_url, model_path, profile=None, detector=None, capture=None):
         if detector is None and not model_path.is_file():
             raise ValueError('No existe el modelo configurado.')
         self.profile = profile if profile is not None else dict(load_profile(), calibration=None)
@@ -68,7 +68,9 @@ class MiraVision:
             self.model, self.device = detector, 'tensorrt'
         if set(self.model.names.values()) != set(LABELS):
             raise ValueError('Las clases del modelo no coinciden con el notebook.')
-        self.url, self.capture = camera_url, None
+        self.url, self.capture = camera_url, capture
+        self.owns_capture = capture is None
+        self.preview_boxes = []
         self.calibration_sha = None
         self.deferred = []
         self.motion_active = False
@@ -164,6 +166,7 @@ class MiraVision:
         else:
             self.reset_tracking()
         annotated = frame.copy()
+        self.preview_boxes = boxes
         for x1, y1, x2, y2, category, confidence in boxes:
             cv2.rectangle(annotated, (int(x1), int(y1)), (int(x2), int(y2)), (60, 220, 80), 2)
             label = {'plastic': 'plastico', 'cardboard': 'carton', 'aluminum': 'aluminio'}[category]
@@ -174,9 +177,9 @@ class MiraVision:
         return Observation(encode(annotated), representative, self.stable, target, len(visible))
 
     def close(self):
-        if self.capture:
+        if self.capture and getattr(self, 'owns_capture', True):
             self.capture.close()
-        self.capture = None
+            self.capture = None
 
 
 class LatestMjpegCapture:
@@ -189,48 +192,58 @@ class LatestMjpegCapture:
         self.sequence = 0
         self.consumed = 0
         self.error = None
+        self.captured_at = 0.
         self.thread = Thread(target=self._capture, name="rony-camera", daemon=True)
         self.thread.start()
 
     def _capture(self):
-        buffer = b""
-        try:
-            with urlopen(self.url, timeout=2) as response:
-                deadline = time.monotonic() + 3
-                while not self.stop_event.is_set():
-                    chunk = response.read1(65536)
-                    if not chunk:
-                        raise ConnectionError("La cámara cerró la conexión.")
-                    buffer += chunk
-                    if len(buffer) > 8 * 1024 * 1024:
-                        raise ValueError("Frame de cámara demasiado grande.")
-                    # Last complete JPEG in this chunk; old frames are intentionally discarded.
-                    end = buffer.rfind(b"\xff\xd9")
-                    start = buffer.rfind(b"\xff\xd8", 0, end) if end >= 0 else -1
-                    if start >= 0:
-                        jpeg, buffer = buffer[start:end + 2], buffer[end + 2:]
-                        deadline = time.monotonic() + 3
-                        with self.condition:
-                            self.jpeg = jpeg
-                            self.sequence += 1
-                            self.condition.notify_all()
-                    elif time.monotonic() >= deadline:
-                        raise TimeoutError("La cámara no entregó un JPEG.")
-        except Exception as error:
-            with self.condition:
-                self.error = error
-                self.jpeg = None
-                self.condition.notify_all()
+        while not self.stop_event.is_set():
+            try:
+                self._drain()
+            except Exception as error:
+                with self.condition:
+                    self.error, self.jpeg = error, None
+                    self.condition.notify_all()
+                self.stop_event.wait(.5)
 
-    def read(self) -> bytes:
+    def _drain(self):
+        buffer = b""
+        with urlopen(self.url, timeout=2) as response:
+            deadline = time.monotonic() + 3
+            while not self.stop_event.is_set():
+                chunk = response.read1(65536)
+                if not chunk:
+                    raise ConnectionError("La cámara cerró la conexión.")
+                buffer += chunk
+                if len(buffer) > 8 * 1024 * 1024:
+                    raise ValueError("Frame de cámara demasiado grande.")
+                # Last complete JPEG in this chunk; old frames are intentionally discarded.
+                end = buffer.rfind(b"\xff\xd9")
+                start = buffer.rfind(b"\xff\xd8", 0, end) if end >= 0 else -1
+                if start >= 0:
+                    jpeg, buffer = buffer[start:end + 2], buffer[end + 2:]
+                    deadline = time.monotonic() + 3
+                    with self.condition:
+                        self.jpeg = jpeg
+                        self.captured_at = time.monotonic()
+                        self.error = None
+                        self.sequence += 1
+                        self.condition.notify_all()
+                elif time.monotonic() >= deadline:
+                    raise TimeoutError("La cámara no entregó un JPEG.")
+
+    def latest(self, after, timeout=3):
         with self.condition:
-            ready = self.condition.wait_for(lambda: self.error or self.sequence > self.consumed or self.stop_event.is_set(), timeout=3)
+            ready = self.condition.wait_for(lambda: self.error or self.sequence > after or self.stop_event.is_set(), timeout=timeout)
             if self.error:
                 raise self.error
             if not ready or self.stop_event.is_set() or self.jpeg is None:
                 raise TimeoutError("No hay un nuevo frame de cámara.")
-            self.consumed = self.sequence
-            return self.jpeg
+            return self.sequence, self.jpeg, self.captured_at
+
+    def read(self) -> bytes:
+        self.consumed, jpeg, _ = self.latest(self.consumed)
+        return jpeg
 
     def close(self):
         self.stop_event.set()

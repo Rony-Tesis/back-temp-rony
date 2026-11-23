@@ -58,14 +58,14 @@ public final class CloudDeviceRelay implements MonitorPort {
     private final RobotProfile profile;
     private final String deviceId;
     private final boolean browserStreaming;
+    private final DeviceCamera camera = new DeviceCamera();
     private final Map<String, Pending> pending = new LinkedHashMap<>();
     private final Set<String> retiredBoots = new LinkedHashSet<>();
     private HistoryPort.Summary cachedSummary;
     private List<Operation> cachedOperations = List.of();
     private long historyAt;
     private Exchange latest;
-    private byte[] jpeg;
-    private long received, sequence;
+    private long received;
     private Instant receivedAt;
     private boolean running;
 
@@ -85,15 +85,7 @@ public final class CloudDeviceRelay implements MonitorPort {
         validate(packet);
         for (Operation operation : packet.operations()) validateOperation(operation);
         byte[] next = packet.jpeg() == null ? null : Base64.getDecoder().decode(packet.jpeg());
-        if (next != null
-                && (next.length < 4
-                        || next.length > 300000
-                        || next[0] != (byte) 0xff
-                        || next[1] != (byte) 0xd8
-                        || next[next.length - 2] != (byte) 0xff
-                        || next[next.length - 1] != (byte) 0xd9)) {
-            throw new IllegalArgumentException("JPEG inválido.");
-        }
+        if (next != null) DeviceCamera.validate(next);
         if (retiredBoots.contains(packet.bootId()))
             throw new IllegalArgumentException("Sesión anterior del JetMax.");
         if (latest != null
@@ -125,10 +117,9 @@ public final class CloudDeviceRelay implements MonitorPort {
         }
         latest = packet;
         if (!acknowledged.isEmpty()) historyAt = 0;
-        jpeg = next;
+        camera.telemetry(packet.bootId(), packet.cameraOnline(), next);
         received = System.nanoTime();
         receivedAt = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
-        sequence++;
         pending.values().removeIf(item -> received - item.created() > TimeUnit.SECONDS.toNanos(10));
         notifyAll();
         return new Reply(
@@ -320,19 +311,31 @@ public final class CloudDeviceRelay implements MonitorPort {
         value.put("requiredStableFrames", profile.integer("STABLE_FRAMES"));
         value.put("provisionalDestinations", true);
         value.put("destinations", profile.bins());
-        value.put("frameSequence", sequence);
+        value.put("frameSequence", camera.frame().sequence());
+        value.put("videoTransport", "wss-jpeg-v1");
         value.put("paused", false);
         value.put("error", null);
         return value;
     }
 
-    public synchronized Frame frame() {
-        return new Frame(sequence, fresh() ? jpeg : null);
+    public Frame frame() {
+        return camera.frame();
     }
 
-    public synchronized Frame waitFrame(long after) throws InterruptedException {
-        if (running && sequence <= after) wait(1000);
-        return frame();
+    public Frame waitFrame(long after) throws InterruptedException {
+        return camera.waitFrame(after);
+    }
+
+    public boolean openVideo(String boot, String channel) {
+        return camera.open(boot, channel);
+    }
+
+    public boolean videoFrame(String boot, String channel, long sourceSequence, byte[] jpeg) {
+        return camera.receive(boot, channel, sourceSequence, jpeg);
+    }
+
+    public void closeVideo(String channel) {
+        camera.disconnect(channel);
     }
 
     public synchronized void physicalCommand(String action) {
@@ -381,6 +384,7 @@ public final class CloudDeviceRelay implements MonitorPort {
 
     public synchronized void close() {
         running = false;
+        camera.close();
         notifyAll();
     }
 }

@@ -9,7 +9,7 @@ if ($RobotHost -notmatch '^[A-Za-z0-9][A-Za-z0-9.-]*$' -or $robotUser -notmatch 
 }
 $bundle = Join-Path $PSScriptRoot 'edge_runtime/dist/runtime-check'
 New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'robot_agent'),(Join-Path $bundle 'adapters') | Out-Null
-foreach ($name in @('run_edge.py','controller.py','plans.py','outbox.py','yolo_tensorrt.py')) {
+foreach ($name in @('run_edge.py','video.py','controller.py','plans.py','outbox.py','yolo_tensorrt.py')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot ('edge_runtime/' + $name)) -Destination $bundle -Force
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'robot_agent/agent.py') -Destination (Join-Path $bundle 'robot_agent/agent.py') -Force

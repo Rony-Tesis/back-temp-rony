@@ -9,8 +9,10 @@ if (-not [Uri]::TryCreate($configuration.cloud_api_url,[UriKind]::Absolute,[ref]
 }
 if ($configuration.device_token -notmatch '^[a-fA-F0-9]{64}$') { throw 'Missing private device credential. Run prepare-render.ps1.' }
 $bundle = Join-Path $PSScriptRoot 'dist/autonomous'
-New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'robot_agent'),(Join-Path $bundle 'adapters') | Out-Null
-foreach ($name in @('run_edge.py','controller.py','plans.py','outbox.py','yolo_tensorrt.py','network_check.py','activate.sh','start.sh','install.sh','rony-edge.service')) {
+New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'robot_agent'),(Join-Path $bundle 'adapters'),(Join-Path $bundle 'vendor') | Out-Null
+& (Join-Path $workspaceRoot 'rony-yolo-isaac/.venv/Scripts/python.exe') (Join-Path $PSScriptRoot 'prepare_video_dependency.py') (Join-Path $bundle 'vendor')
+if ($LASTEXITCODE -ne 0) { throw 'Could not verify the isolated video dependency.' }
+foreach ($name in @('run_edge.py','video.py','controller.py','plans.py','outbox.py','yolo_tensorrt.py','network_check.py','activate.sh','start.sh','install.sh','rony-edge.service')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $bundle -Force
 }
 Copy-Item -LiteralPath (Join-Path $backendRoot 'robot_agent/agent.py') -Destination (Join-Path $bundle 'robot_agent/agent.py') -Force
