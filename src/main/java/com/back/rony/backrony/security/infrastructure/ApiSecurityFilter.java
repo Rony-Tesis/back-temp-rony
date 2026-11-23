@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.ObjectMapper;
@@ -23,16 +24,28 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
     private final RonyProperties properties;
     private final ObjectMapper mapper;
     private final DeviceAccessPolicy devices;
+    private final URI frontendOrigin;
 
     public ApiSecurityFilter(
             AccessPolicy access,
             RonyProperties properties,
             ObjectMapper mapper,
-            DeviceAccessPolicy devices) {
+            DeviceAccessPolicy devices,
+            @Value("${rony.frontend-url:}") String frontendUrl) {
         this.access = access;
         this.properties = properties;
         this.mapper = mapper;
         this.devices = devices;
+        this.frontendOrigin = frontendUrl.isBlank() ? null : URI.create(frontendUrl);
+        if (frontendOrigin != null
+                && (!"https".equals(frontendOrigin.getScheme())
+                        || frontendOrigin.getHost() == null
+                        || frontendOrigin.getUserInfo() != null
+                        || frontendOrigin.getQuery() != null
+                        || frontendOrigin.getFragment() != null
+                        || !List.of("", "/").contains(frontendOrigin.getPath()))) {
+            throw new IllegalArgumentException("La web pública requiere un origen HTTPS válido.");
+        }
     }
 
     @Override
@@ -68,9 +81,7 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
             try {
                 URI expected = URI.create(request.getScheme() + "://" + request.getHeader("Host"));
                 URI actual = URI.create(origin);
-                if (!java.util.Objects.equals(actual.getScheme(), expected.getScheme())
-                        || !java.util.Objects.equals(
-                                actual.getRawAuthority(), expected.getRawAuthority())) {
+                if (!sameOrigin(actual, expected) && !sameOrigin(actual, frontendOrigin)) {
                     reject(response, 403, "Origen no permitido.");
                     return;
                 }
@@ -109,6 +120,16 @@ public final class ApiSecurityFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    private static boolean sameOrigin(URI actual, URI expected) {
+        return expected != null
+                && java.util.Objects.equals(actual.getScheme(), expected.getScheme())
+                && java.util.Objects.equals(actual.getRawAuthority(), expected.getRawAuthority())
+                && actual.getUserInfo() == null
+                && actual.getQuery() == null
+                && actual.getFragment() == null
+                && List.of("", "/").contains(actual.getPath());
     }
 
     private void reject(HttpServletResponse response, int status, String detail)

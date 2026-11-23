@@ -25,5 +25,6 @@ __pycache__/
 *.pem
 *.key
 *.jks
+*.p12
 .ssh/
 .mvn/wrapper/maven-wrapper.jar

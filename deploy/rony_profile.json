@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "sourceNotebook": "MovimientoRony/Rony_YOLO11n_Automatico_Windows_Etiquetas_ES.ipynb",
+  "sourceSha256": "ef4e9a516c11eb986f1fa6a007fc12b02ef49e94fd089d731e1383b5cd3dac02",
+  "model": "modelo/yolo11n_300ep_20261028_211758_best.pt",
+  "values": {
+    "IMGSZ": 640,
+    "CONF": 0.6,
+    "IOU": 0.3,
+    "AGNOSTIC_NMS": true,
+    "MAX_DET": 20,
+    "MIN_BOX_SIDE_PX": 12,
+    "MAX_BOX_AREA_RATIO": 0.25,
+    "EDGE_MARGIN_PX": 8,
+    "AUTO_MIN_CONF": 0.8,
+    "MAX_PIXEL_JUMP": 30.0,
+    "STABLE_FRAMES": 8,
+    "HOME_X": 0.0,
+    "HOME_Y": -162.94,
+    "HOME_Z": 212.8,
+    "Z_APPROACH": 120.0,
+    "Z_PICK": 90.0,
+    "GRIPPER_OPEN": 0,
+    "GRIPPER_PICK": 80,
+    "DROP_EXCLUSION_MM": 40.0,
+    "APPROACH_TIME": 2.5,
+    "VERTICAL_TIME": 2.0,
+    "HOME_TIME": 3.0,
+    "SIDE_TIME": 2.5,
+    "GRIPPER_OPEN_TIME": 1.0,
+    "GRIPPER_CLOSE_TIME": 2.0,
+    "GRIPPER_CLOSE_SETTLE": 1.0,
+    "STEP_SETTLE_TIME": 0.7,
+    "POSITION_STABLE_TIME": 0.4,
+    "GRIPPER_POSITION_TOLERANCE": 3.0,
+    "GRIPPER_POSITION_TIMEOUT": 4.0,
+    "DETECTION_PERIOD": 0.1,
+    "EMPTY_CONFIRM_FRAMES": 12,
+    "SEARCH_TIMEOUT": 8.0,
+    "POSITION_TOLERANCE": 2.0,
+    "POSITION_TIMEOUT": 4.0,
+    "MAX_REPEATS_SAME_OBJECT": 3,
+    "REPEAT_RADIUS_MM": 12.0
+  },
+  "calibration": {
+    "K": [
+      [
+        421.7179870605469,
+        0.0,
+        331.8549044912379
+      ],
+      [
+        0.0,
+        464.7308349609375,
+        234.46281488904788
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "R": [
+      [
+        -0.07697136252374011
+      ],
+      [
+        3.086054291330642
+      ],
+      [
+        0.1219708621340273
+      ]
+    ],
+    "T": [
+      [
+        -16.652967984876717
+      ],
+      [
+        51.4273611584664
+      ],
+      [
+        183.827498153882
+      ]
+    ]
+  },
+  "enabledCategories": [
+    "plastic",
+    "aluminum",
+    "cardboard"
+  ],
+  "provisionalDestinations": true,
+  "bins": {
+    "aluminum": {
+      "label": "Aluminio",
+      "baseAngleDeg": 190,
+      "positionMm": [
+        153.1135,
+        -55.7288,
+        212.8
+      ],
+      "transitMm": [
+        [
+          81.47,
+          -141.1102,
+          212.8
+        ],
+        [
+          141.1102,
+          -81.47,
+          212.8
+        ],
+        [
+          153.1135,
+          -55.7288,
+          212.8
+        ]
+      ]
+    },
+    "cardboard": {
+      "label": "Cartón",
+      "baseAngleDeg": 210,
+      "positionMm": [
+        162.94,
+        -0.0,
+        212.8
+      ],
+      "transitMm": [
+        [
+          81.47,
+          -141.1102,
+          212.8
+        ],
+        [
+          141.1102,
+          -81.47,
+          212.8
+        ],
+        [
+          162.94,
+          -0.0,
+          212.8
+        ]
+      ]
+    },
+    "plastic": {
+      "label": "Plástico",
+      "baseAngleDeg": 230,
+      "positionMm": [
+        153.1135,
+        55.7288,
+        212.8
+      ],
+      "transitMm": [
+        [
+          81.47,
+          -141.1102,
+          212.8
+        ],
+        [
+          141.1102,
+          -81.47,
+          212.8
+        ],
+        [
+          162.94,
+          -0.0,
+          212.8
+        ],
+        [
+          153.1135,
+          55.7288,
+          212.8
+        ]
+      ]
+    }
+  },
+  "motion": {
+    "baseJointLimitsDeg": [
+      10,
+      230
+    ],
+    "homeBaseAngleDeg": 120,
+    "maxTransitStepDeg": 30,
+    "continuousUntilCancelled": true
+  },
+  "workspaceMm": {
+    "x": [
+      -100,
+      100
+    ],
+    "y": [
+      -240,
+      -90
+    ],
+    "z": [
+      90,
+      213
+    ]
+  }
+}

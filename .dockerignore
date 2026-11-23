@@ -1,0 +1,23 @@
+# Allow only build inputs. Render secret files, credentials and reports stay out.
+*
+!.mvn/
+!.mvn/wrapper/
+!.mvn/wrapper/maven-wrapper.properties
+!mvnw
+!pom.xml
+!src/
+!src/**
+!deploy/
+!deploy/render-start.sh
+!deploy/rony_profile.json
+
+# Explicitly exclude private files even inside included parent directories.
+**/.env
+**/.env.*
+**/config.local.json
+**/*.pem
+**/*.key
+**/*.jks
+**/*.p12
+**/dist/**
+**/data/**

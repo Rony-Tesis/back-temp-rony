@@ -43,6 +43,21 @@ Todavía no se eligieron servidor ni dominio. No se contrató ni publicó ningú
 
 Comandos de mantenimiento del nuevo servicio: `systemctl status rony-edge` y `journalctl -u rony-edge -n 80 --no-pager`. Para volver al banco, detener `rony-edge` y habilitar/iniciar `rony-agent`; nunca operar ambos controladores simultáneamente. `run.ps1 -Mode Physical` conserva el **banco anterior**, con YOLO en el PC; no es el arranque de la arquitectura autónoma final.
 
+## Netlify, Render y Aiven
+
+El front publicado es `https://rony-brazo.netlify.app`. El `Dockerfile` de la raíz del backend construye únicamente este repositorio con Java 21; no necesita Angular, Python, YOLO ni los otros repositorios dentro de Render. `deploy/Dockerfile` conserva la alternativa de servidor unificado anterior y no se debe seleccionar para este despliegue.
+
+1. Guardar las credenciales de Aiven en `deploy/.env.aiven` y su CA en `deploy/aiven-ca.pem`, ambos ignorados por Git. Ejecutar `./prepare-render.ps1`. Conserva la clave web, genera una clave distinta para el JetMax si falta y prepara `deploy/.env.render` para importar en Render. No publica servicios ni modifica el brazo.
+2. En Render crear **Web Service**, conectar `back-temp-rony`, rama `main`, lenguaje **Docker**, raíz vacía, Dockerfile `./Dockerfile`, contexto `.` y Docker Command vacío.
+3. Importar las variables del archivo privado `deploy/.env.render`. Añadir un **Secret File** llamado exactamente `aiven-ca.pem` con el contenido del certificado. El inicio transforma esa CA en un almacén temporal; los secretos no se copian a la imagen.
+4. Usar `/health` como Health Check Path. Devuelve 200 si la base responde, incluso cuando el brazo todavía no está conectado; la API de cámara y control sigue autenticada. Render proporciona `PORT` y `RENDER_EXTERNAL_HOSTNAME` automáticamente.
+5. Desplegar. El perfil `render` usa `0.0.0.0`, el puerto de Render, Aiven con `sslMode=VERIFY_IDENTITY` y Flyway para crear/actualizar las tablas. No desactiva SSL ni habilita limpieza automática de datos. No ejecuta YOLO o ROS.
+6. Con la URL HTTPS real del backend, ejecutar `./prepare-render.ps1 -ApiUrl https://URL_REAL.onrender.com`. Esa dirección se guarda en la configuración privada para el JetMax. Después configurar en Netlify el proxy `/api/*` hacia ese backend antes de la regla SPA, comprobar sesión/telemetría/cámara y activar el servicio autónomo del brazo.
+
+La sesión conserva su cookie HttpOnly, Secure en HTTPS y SameSite=Strict: el navegador debe usar `/api` a través del proxy de Netlify. El backend acepta ese origen público exacto y mantiene la autenticación y la cabecera de control; no abre CORS a cualquier sitio. Falta comprobar la conexión entre ambos servicios una vez que exista la URL real de Render. Un servicio Render Free puede dormir por inactividad; las pruebas de recuperación deben incluir ese caso.
+
+`deploy/rony_profile.json` es la copia de distribución del perfil exportado del notebook y permite construir el backend de forma independiente. `prepare-render.ps1` la sincroniza y una prueba verifica que coincide con el perfil canónico. No contiene la calibración ROS activa ni credenciales; no escribe parámetros del brazo. Para actualizar el notebook/perfil, volver a sincronizar y confirmar la copia antes de desplegar.
+
 ## Banco local anterior: preparación y arranque en este PC
 
 Desde esta carpeta:
